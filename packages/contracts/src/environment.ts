@@ -26,12 +26,19 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
 });
 export type ExecutionEnvironmentCapabilities = typeof ExecutionEnvironmentCapabilities.Type;
 
+export const ExecutionEnvironmentResources = Schema.Struct({
+  freeMemoryMb: Schema.Number,
+  totalMemoryMb: Schema.Number,
+});
+export type ExecutionEnvironmentResources = typeof ExecutionEnvironmentResources.Type;
+
 export const ExecutionEnvironmentDescriptor = Schema.Struct({
   environmentId: EnvironmentId,
   label: TrimmedNonEmptyString,
   platform: ExecutionEnvironmentPlatform,
   serverVersion: TrimmedNonEmptyString,
   capabilities: ExecutionEnvironmentCapabilities,
+  resources: Schema.optional(ExecutionEnvironmentResources),
 });
 export type ExecutionEnvironmentDescriptor = typeof ExecutionEnvironmentDescriptor.Type;
 

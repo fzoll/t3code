@@ -1,3 +1,4 @@
+import * as NodeOS from "node:os";
 import { EnvironmentId, type ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Context from "effect/Context";
@@ -125,7 +126,7 @@ export const make = Effect.gen(function* () {
   const cwdBaseName = path.basename(serverConfig.cwd).trim();
   const label = yield* resolveServerEnvironmentLabel({ cwdBaseName });
 
-  const descriptor: ExecutionEnvironmentDescriptor = {
+  const baseDescriptor = {
     environmentId,
     label,
     platform: {
@@ -141,7 +142,15 @@ export const make = Effect.gen(function* () {
 
   return ServerEnvironment.of({
     getEnvironmentId: Effect.succeed(environmentId),
-    getDescriptor: Effect.succeed(descriptor),
+    getDescriptor: Effect.sync(
+      (): ExecutionEnvironmentDescriptor => ({
+        ...baseDescriptor,
+        resources: {
+          freeMemoryMb: Math.round(NodeOS.freemem() / (1024 * 1024)),
+          totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
+        },
+      }),
+    ),
   });
 });
 
