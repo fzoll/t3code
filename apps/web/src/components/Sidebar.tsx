@@ -121,6 +121,7 @@ import {
   resolveThreadRouteTarget,
 } from "../threadRoutes";
 import { stackedThreadToast, toastManager } from "./ui/toast";
+import { EnvironmentVariableEditor } from "./EnvironmentVariableEditor";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { Kbd } from "./ui/kbd";
@@ -1206,6 +1207,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const [projectGroupingSelection, setProjectGroupingSelection] = useState<
     SidebarProjectGroupingMode | "inherit"
   >("inherit");
+  const [projectEnvTarget, setProjectEnvTarget] = useState<SidebarProjectGroupMember | null>(null);
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const confirmArchiveButtonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -1586,7 +1588,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
         const actionHandlers = new Map<string, () => Promise<void> | void>();
         const makeLeaf = (
-          action: "rename" | "grouping" | "copy-path" | "delete",
+          action: "rename" | "grouping" | "copy-path" | "environment" | "delete",
           member: SidebarProjectGroupMember,
           options?: {
             destructive?: boolean;
@@ -1605,6 +1607,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               case "copy-path":
                 copyPathToClipboard(member.workspaceRoot, { path: member.workspaceRoot });
                 return;
+              case "environment":
+                setProjectEnvTarget(member);
+                return;
               case "delete":
                 return handleRemoveProject(member);
             }
@@ -1619,7 +1624,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         };
 
         const buildTargetedItem = (
-          action: "rename" | "grouping" | "copy-path" | "delete",
+          action: "rename" | "grouping" | "copy-path" | "environment" | "delete",
           label: string,
           options?: {
             destructive?: boolean;
@@ -1655,6 +1660,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           [
             buildTargetedItem("rename", "Rename"),
             buildTargetedItem("grouping", "Group into..."),
+            buildTargetedItem("environment", "Environment Variables"),
             buildTargetedItem("copy-path", "Copy Path"),
             buildTargetedItem("delete", "Remove", {
               destructive: true,
@@ -1678,6 +1684,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       handleRemoveProject,
       openProjectGroupingDialog,
       openProjectRenameDialog,
+      setProjectEnvTarget,
       project.groupedProjectCount,
       project.memberProjects,
       suppressProjectClickForContextMenuRef,
@@ -2471,6 +2478,62 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               Cancel
             </Button>
             <Button onClick={saveProjectGroupingPreference}>Save</Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={projectEnvTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setProjectEnvTarget(null);
+          }
+        }}
+      >
+        <DialogPopup className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Project environment variables</DialogTitle>
+            <DialogDescription>
+              {projectEnvTarget
+                ? `Configure environment variables for ${projectEnvTarget.title}. These are passed to Claude Code sessions started in this project.`
+                : "Configure project environment variables."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel className="space-y-4">
+            {projectEnvTarget && (
+              <EnvironmentVariableEditor
+                environment={projectEnvTarget.environment ?? []}
+                onChange={async (environment) => {
+                  const result = await updateProject({
+                    environmentId: projectEnvTarget.environmentId,
+                    input: {
+                      projectId: projectEnvTarget.id,
+                      environment,
+                    },
+                  });
+                  if (result._tag === "Failure") {
+                    toastManager.add(
+                      stackedThreadToast({
+                        type: "error",
+                        title: "Failed to update environment variables",
+                        description: String(result.cause),
+                      }),
+                    );
+                  }
+                }}
+                description="Add variables like GH_TOKEN, GIT_AUTHOR_EMAIL, or ANTHROPIC_API_KEY. These are injected into Claude Code sessions for this project."
+              />
+            )}
+            {projectEnvTarget?.environmentLabel ? (
+              <p className="text-xs text-muted-foreground">
+                Environment: {projectEnvTarget.environmentLabel}
+              </p>
+            ) : null}
+          </DialogPanel>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProjectEnvTarget(null)}>
+              Done
+            </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
