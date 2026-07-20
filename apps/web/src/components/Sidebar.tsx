@@ -1223,6 +1223,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     SidebarProjectGroupingMode | "inherit"
   >("inherit");
   const [projectEnvTarget, setProjectEnvTarget] = useState<SidebarProjectGroupMember | null>(null);
+  const [projectEnvDraft, setProjectEnvDraft] = useState<
+    ReadonlyArray<import("@t3tools/contracts").ProviderInstanceEnvironmentVariable>
+  >([]);
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const confirmArchiveButtonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -1623,6 +1626,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 copyPathToClipboard(member.workspaceRoot, { path: member.workspaceRoot });
                 return;
               case "environment":
+                setProjectEnvDraft(member.environment ?? []);
                 setProjectEnvTarget(member);
                 return;
               case "delete":
@@ -2538,24 +2542,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             {projectEnvTarget && (
               <EnvironmentVariableEditor
                 environment={projectEnvTarget.environment ?? []}
-                onChange={async (environment) => {
-                  const result = await updateProject({
-                    environmentId: projectEnvTarget.environmentId,
-                    input: {
-                      projectId: projectEnvTarget.id,
-                      environment,
-                    },
-                  });
-                  if (result._tag === "Failure") {
-                    toastManager.add(
-                      stackedThreadToast({
-                        type: "error",
-                        title: "Failed to update environment variables",
-                        description: String(result.cause),
-                      }),
-                    );
-                  }
-                }}
+                onChange={setProjectEnvDraft}
                 description="Add variables like GH_TOKEN, GIT_AUTHOR_EMAIL, or ANTHROPIC_API_KEY. These are injected into Claude Code sessions for this project."
               />
             )}
@@ -2567,7 +2554,32 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           </DialogPanel>
           <DialogFooter>
             <Button variant="outline" onClick={() => setProjectEnvTarget(null)}>
-              Done
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!projectEnvTarget) return;
+                const result = await updateProject({
+                  environmentId: projectEnvTarget.environmentId,
+                  input: {
+                    projectId: projectEnvTarget.id,
+                    environment: projectEnvDraft,
+                  },
+                });
+                if (result._tag === "Failure") {
+                  toastManager.add(
+                    stackedThreadToast({
+                      type: "error",
+                      title: "Failed to update environment variables",
+                      description: String(result.cause),
+                    }),
+                  );
+                } else {
+                  setProjectEnvTarget(null);
+                }
+              }}
+            >
+              Save
             </Button>
           </DialogFooter>
         </DialogPopup>
