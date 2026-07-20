@@ -145,6 +145,7 @@ export default defineConfig(() => {
       host,
       port,
       strictPort: true,
+      allowedHosts: true,
       ...(devProxyTarget
         ? {
             proxy: {
