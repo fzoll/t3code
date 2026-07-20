@@ -24,6 +24,7 @@ import {
   type OrchestrationThreadShell,
   ModelSelection,
   ProjectId,
+  ProviderInstanceEnvironment,
   ThreadId,
 } from "@t3tools/contracts";
 import * as Arr from "effect/Array";
@@ -67,6 +68,7 @@ const ProjectionProjectDbRowSchema = ProjectionProject.mapFields(
   Struct.assign({
     defaultModelSelection: Schema.NullOr(Schema.fromJsonString(ModelSelection)),
     scripts: Schema.fromJsonString(Schema.Array(ProjectScript)),
+    environment: Schema.fromJsonString(ProviderInstanceEnvironment),
   }),
 );
 const ProjectionThreadMessageDbRowSchema = ProjectionThreadMessage.mapFields(
@@ -281,6 +283,7 @@ function mapProjectShellRow(
     repositoryIdentity,
     defaultModelSelection: row.defaultModelSelection,
     scripts: row.scripts,
+    environment: row.environment ?? [],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -354,6 +357,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           workspace_root AS "workspaceRoot",
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
+          environment_json AS "environment",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
@@ -804,6 +808,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           workspace_root AS "workspaceRoot",
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
+          environment_json AS "environment",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
@@ -826,6 +831,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           workspace_root AS "workspaceRoot",
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
+          environment_json AS "environment",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
@@ -1310,6 +1316,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 repositoryIdentity: repositoryIdentities.get(row.projectId) ?? null,
                 defaultModelSelection: row.defaultModelSelection,
                 scripts: row.scripts,
+                environment: row.environment ?? [],
                 createdAt: row.createdAt,
                 updatedAt: row.updatedAt,
                 deletedAt: row.deletedAt,
@@ -1438,6 +1445,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   workspaceRoot: row.workspaceRoot,
                   defaultModelSelection: row.defaultModelSelection,
                   scripts: row.scripts,
+                  environment: row.environment ?? [],
                   createdAt: row.createdAt,
                   updatedAt: row.updatedAt,
                   deletedAt: row.deletedAt,
@@ -1918,6 +1926,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                     repositoryIdentity,
                     defaultModelSelection: option.value.defaultModelSelection,
                     scripts: option.value.scripts,
+                    environment: option.value.environment ?? [],
                     createdAt: option.value.createdAt,
                     updatedAt: option.value.updatedAt,
                     deletedAt: option.value.deletedAt,
