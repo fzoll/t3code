@@ -1223,9 +1223,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     SidebarProjectGroupingMode | "inherit"
   >("inherit");
   const [projectEnvTarget, setProjectEnvTarget] = useState<SidebarProjectGroupMember | null>(null);
-  const [projectEnvDraft, setProjectEnvDraft] = useState<
-    ReadonlyArray<import("@t3tools/contracts").ProviderInstanceEnvironmentVariable>
-  >([]);
+  const projectEnvGetValuesRef = useRef<
+    () => ReadonlyArray<import("@t3tools/contracts").ProviderInstanceEnvironmentVariable>
+  >(() => []);
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const confirmArchiveButtonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -1626,7 +1626,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 copyPathToClipboard(member.workspaceRoot, { path: member.workspaceRoot });
                 return;
               case "environment":
-                setProjectEnvDraft(member.environment ?? []);
                 setProjectEnvTarget(member);
                 return;
               case "delete":
@@ -2542,7 +2541,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             {projectEnvTarget && (
               <EnvironmentVariableEditor
                 environment={projectEnvTarget.environment ?? []}
-                onChange={setProjectEnvDraft}
+                onChange={() => {}}
+                getValuesRef={projectEnvGetValuesRef}
                 description="Add variables like GH_TOKEN, GIT_AUTHOR_EMAIL, or ANTHROPIC_API_KEY. These are injected into Claude Code sessions for this project."
               />
             )}
@@ -2557,13 +2557,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               Cancel
             </Button>
             <Button
+              onMouseDown={() => {
+                (document.activeElement as HTMLElement | null)?.blur();
+              }}
               onClick={async () => {
                 if (!projectEnvTarget) return;
+                await new Promise((r) => setTimeout(r, 50));
+                const envValues = projectEnvGetValuesRef.current();
                 const result = await updateProject({
                   environmentId: projectEnvTarget.environmentId,
                   input: {
                     projectId: projectEnvTarget.id,
-                    environment: projectEnvDraft,
+                    environment: envValues,
                   },
                 });
                 if (result._tag === "Failure") {

@@ -1,7 +1,7 @@
 "use client";
 
 import { PlusIcon, XIcon } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ProviderInstanceEnvironmentVariable } from "@t3tools/contracts";
 
 import { Button } from "./ui/button";
@@ -35,11 +35,37 @@ function makeDraftRow(variable: ProviderInstanceEnvironmentVariable, index: numb
 export function EnvironmentVariableEditor(props: {
   readonly environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>;
   readonly onChange: (environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>) => void;
+  readonly getValuesRef?: React.MutableRefObject<
+    () => ReadonlyArray<ProviderInstanceEnvironmentVariable>
+  >;
   readonly description?: string;
 }) {
-  const [rows, setRows] = useState<ReadonlyArray<DraftRow>>(() =>
-    props.environment.map(makeDraftRow),
-  );
+  const rowsRef = useRef<ReadonlyArray<DraftRow>>([]);
+  const [rows, setRows] = useState<ReadonlyArray<DraftRow>>(() => {
+    const initial = props.environment.map(makeDraftRow);
+    rowsRef.current = initial;
+    return initial;
+  });
+
+  const setRowsAndRef = (nextRows: ReadonlyArray<DraftRow>) => {
+    rowsRef.current = nextRows;
+    setRows(nextRows);
+  };
+
+  const getValues = (): ReadonlyArray<ProviderInstanceEnvironmentVariable> => {
+    const result: ProviderInstanceEnvironmentVariable[] = [];
+    for (const row of rowsRef.current) {
+      const name = row.name.trim();
+      if (!ENVIRONMENT_VARIABLE_NAME_PATTERN.test(name)) continue;
+      const { id: _id, ...rest } = row;
+      result.push({ ...rest, name });
+    }
+    return result;
+  };
+
+  if (props.getValuesRef) {
+    props.getValuesRef.current = getValues;
+  }
 
   const publishRows = (nextRows: ReadonlyArray<DraftRow>) => {
     const published: ProviderInstanceEnvironmentVariable[] = [];
@@ -72,13 +98,13 @@ export function EnvironmentVariableEditor(props: {
           }
         : row,
     );
-    setRows(nextRows);
+    setRowsAndRef(nextRows);
     publishRows(nextRows);
   };
 
   const removeVariable = (id: string) => {
     const nextRows = rows.filter((row) => row.id !== id);
-    setRows(nextRows);
+    setRowsAndRef(nextRows);
     publishRows(nextRows);
   };
 
@@ -92,7 +118,7 @@ export function EnvironmentVariableEditor(props: {
           variant="outline"
           className="h-7 gap-1.5 px-2 text-xs"
           onClick={() =>
-            setRows([
+            setRowsAndRef([
               ...rows,
               {
                 id: nextDraftId(),
