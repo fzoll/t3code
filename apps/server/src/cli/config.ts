@@ -1,3 +1,4 @@
+import * as NodeOS from "node:os";
 import * as NetService from "@t3tools/shared/Net";
 import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
 import { DesktopBackendBootstrap, PortSchema } from "@t3tools/contracts";
@@ -130,6 +131,8 @@ const EnvServerConfig = Config.all({
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
+  databaseUrl: Config.string("DATABASE_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  nodeId: Config.string("T3CODE_NODE_ID").pipe(Config.option, Config.map(Option.getOrUndefined)),
 });
 
 export interface CliServerFlags {
@@ -370,6 +373,8 @@ export const resolveServerConfig = (
       logWebSocketEvents,
       tailscaleServeEnabled,
       tailscaleServePort,
+      databaseUrl: env.databaseUrl,
+      nodeId: env.nodeId ?? NodeOS.hostname(),
     };
 
     return config;

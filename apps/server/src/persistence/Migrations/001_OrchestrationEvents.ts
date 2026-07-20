@@ -1,26 +1,49 @@
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as Effect from "effect/Effect";
 
+import { getDialect } from "./helpers.ts";
+
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const dialect = yield* getDialect;
 
-  yield* sql`
-    CREATE TABLE IF NOT EXISTS orchestration_events (
-      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-      event_id TEXT NOT NULL UNIQUE,
-      aggregate_kind TEXT NOT NULL,
-      stream_id TEXT NOT NULL,
-      stream_version INTEGER NOT NULL,
-      event_type TEXT NOT NULL,
-      occurred_at TEXT NOT NULL,
-      command_id TEXT,
-      causation_event_id TEXT,
-      correlation_id TEXT,
-      actor_kind TEXT NOT NULL,
-      payload_json TEXT NOT NULL,
-      metadata_json TEXT NOT NULL
-    )
-  `;
+  if (dialect === "postgresql") {
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS orchestration_events (
+        sequence INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        event_id TEXT NOT NULL UNIQUE,
+        aggregate_kind TEXT NOT NULL,
+        stream_id TEXT NOT NULL,
+        stream_version INTEGER NOT NULL,
+        event_type TEXT NOT NULL,
+        occurred_at TEXT NOT NULL,
+        command_id TEXT,
+        causation_event_id TEXT,
+        correlation_id TEXT,
+        actor_kind TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        metadata_json TEXT NOT NULL
+      )
+    `;
+  } else {
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS orchestration_events (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT NOT NULL UNIQUE,
+        aggregate_kind TEXT NOT NULL,
+        stream_id TEXT NOT NULL,
+        stream_version INTEGER NOT NULL,
+        event_type TEXT NOT NULL,
+        occurred_at TEXT NOT NULL,
+        command_id TEXT,
+        causation_event_id TEXT,
+        correlation_id TEXT,
+        actor_kind TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        metadata_json TEXT NOT NULL
+      )
+    `;
+  }
 
   yield* sql`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_orch_events_stream_version

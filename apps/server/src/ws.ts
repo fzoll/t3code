@@ -57,6 +57,7 @@ import {
   type TerminalEvent,
   type TerminalMetadataStreamEvent,
   WS_METHODS,
+  WorkspaceError,
   WsRpcGroup,
 } from "@t3tools/contracts";
 import { clamp } from "effect/Number";
@@ -87,6 +88,7 @@ import { issueAssetUrl } from "./assets/AssetAccess.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
+import * as WorkspaceRepoService from "./workspace/WorkspaceRepoService.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
@@ -320,6 +322,8 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.vcsCreateRef, AuthOrchestrationOperateScope],
   [WS_METHODS.vcsSwitchRef, AuthOrchestrationOperateScope],
   [WS_METHODS.vcsInit, AuthOrchestrationOperateScope],
+  [WS_METHODS.workspaceEnsureRepo, AuthOrchestrationOperateScope],
+  [WS_METHODS.workspaceCleanup, AuthOrchestrationOperateScope],
   [WS_METHODS.reviewGetDiffPreview, AuthReviewWriteScope],
   [WS_METHODS.terminalOpen, AuthTerminalOperateScope],
   [WS_METHODS.terminalAttach, AuthTerminalOperateScope],
@@ -436,6 +440,7 @@ const makeWsRpcLayer = (
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
       const processResourceMonitor = yield* ProcessResourceMonitor.ProcessResourceMonitor;
       const relayClient = yield* RelayClient.RelayClient;
+      const workspaceRepoService = yield* WorkspaceRepoService.WorkspaceRepoService;
       const authorizationError = (requiredScope: AuthEnvironmentScope) =>
         new EnvironmentAuthorizationError({
           message: `The authenticated token is missing required scope: ${requiredScope}.`,
@@ -1623,6 +1628,22 @@ const makeWsRpcLayer = (
               .initRepository(input)
               .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "vcs" },
+          ),
+        [WS_METHODS.workspaceEnsureRepo]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.workspaceEnsureRepo,
+            workspaceRepoService
+              .ensureRepo(input)
+              .pipe(Effect.mapError((cause) => new WorkspaceError({ detail: String(cause) }))),
+            { "rpc.aggregate": "workspace" },
+          ),
+        [WS_METHODS.workspaceCleanup]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.workspaceCleanup,
+            workspaceRepoService
+              .cleanup(input)
+              .pipe(Effect.mapError((cause) => new WorkspaceError({ detail: String(cause) }))),
+            { "rpc.aggregate": "workspace" },
           ),
         [WS_METHODS.reviewGetDiffPreview]: (input) =>
           observeRpcEffect(WS_METHODS.reviewGetDiffPreview, review.getDiffPreview(input), {

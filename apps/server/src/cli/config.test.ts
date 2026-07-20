@@ -124,6 +124,8 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: true,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        databaseUrl: undefined,
+        nodeId: expect.any(String),
       });
       assert.equal(resolved.stateDir, join(baseDir, "userdata"));
     }),
@@ -194,6 +196,8 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: true,
         tailscaleServeEnabled: true,
         tailscaleServePort: 8443,
+        databaseUrl: undefined,
+        nodeId: expect.any(String),
       });
       assert.equal(resolved.dbPath, join(baseDir, "userdata", "state.sqlite"));
     }),
@@ -267,6 +271,8 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: false,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        databaseUrl: undefined,
+        nodeId: expect.any(String),
       });
     }),
   );
@@ -341,6 +347,8 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: false,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        databaseUrl: undefined,
+        nodeId: expect.any(String),
       });
       assert.equal(join(baseDir, "userdata"), resolved.stateDir);
     }),
@@ -469,6 +477,8 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: true,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        databaseUrl: undefined,
+        nodeId: expect.any(String),
       });
     }),
   );
@@ -538,6 +548,8 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: false,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        databaseUrl: undefined,
+        nodeId: expect.any(String),
       });
     }),
   );
@@ -601,6 +613,8 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         logWebSocketEvents: false,
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
+        databaseUrl: undefined,
+        nodeId: expect.any(String),
       });
     }),
   );

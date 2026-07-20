@@ -223,6 +223,10 @@ export const WS_METHODS = {
   sourceControlCloneRepository: "sourceControl.cloneRepository",
   sourceControlPublishRepository: "sourceControl.publishRepository",
 
+  // Workspace methods
+  workspaceEnsureRepo: "workspace.ensureRepo",
+  workspaceCleanup: "workspace.cleanup",
+
   // Streaming subscriptions
   subscribeVcsStatus: "subscribeVcsStatus",
   subscribeTerminalEvents: "subscribeTerminalEvents",
@@ -681,6 +685,41 @@ export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess,
   stream: true,
 });
 
+export const WorkspaceEnsureRepoInput = Schema.Struct({
+  repo: Schema.String,
+  branch: Schema.String,
+  token: Schema.String,
+});
+
+export const WorkspaceEnsureRepoResult = Schema.Struct({
+  path: Schema.String,
+  ready: Schema.Boolean,
+});
+
+export class WorkspaceError extends Schema.TaggedErrorClass<WorkspaceError>()("WorkspaceError", {
+  detail: Schema.String,
+}) {}
+
+export const WorkspaceCleanupInput = Schema.Struct({
+  repo: Schema.String,
+});
+
+export const WorkspaceCleanupResult = Schema.Struct({
+  removed: Schema.Boolean,
+});
+
+export const WsWorkspaceEnsureRepoRpc = Rpc.make(WS_METHODS.workspaceEnsureRepo, {
+  payload: WorkspaceEnsureRepoInput,
+  success: WorkspaceEnsureRepoResult,
+  error: Schema.Union([WorkspaceError, EnvironmentAuthorizationError]),
+});
+
+export const WsWorkspaceCleanupRpc = Rpc.make(WS_METHODS.workspaceCleanup, {
+  payload: WorkspaceCleanupInput,
+  success: WorkspaceCleanupResult,
+  error: Schema.Union([WorkspaceError, EnvironmentAuthorizationError]),
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -750,4 +789,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
+  WsWorkspaceEnsureRepoRpc,
+  WsWorkspaceCleanupRpc,
 );

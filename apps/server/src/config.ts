@@ -79,6 +79,8 @@ export class ServerConfig extends Context.Service<
     readonly logWebSocketEvents: boolean;
     readonly tailscaleServeEnabled: boolean;
     readonly tailscaleServePort: number;
+    readonly databaseUrl: string | undefined;
+    readonly nodeId: string;
   }
 >()("t3/config/ServerConfig") {
   /** @deprecated Import and use `layerTest` from this module. */
@@ -189,6 +191,8 @@ const makeTest = Effect.fn("ServerConfig.makeTest")(function* (
     devUrl,
     noBrowser: false,
     startupPresentation: "browser",
+    databaseUrl: undefined,
+    nodeId: "test",
   });
 });
 

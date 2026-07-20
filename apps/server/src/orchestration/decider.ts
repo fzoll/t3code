@@ -254,6 +254,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           interactionMode: command.interactionMode,
           branch: command.branch,
           worktreePath: command.worktreePath,
+          nodeId: command.nodeId,
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },
@@ -476,6 +477,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           runtimeMode: targetThread.runtimeMode,
           interactionMode: targetThread.interactionMode,
           ...(sourceProposedPlan !== undefined ? { sourceProposedPlan } : {}),
+          ...(command.providerEnv !== undefined ? { providerEnv: command.providerEnv } : {}),
           createdAt: command.createdAt,
         },
       };

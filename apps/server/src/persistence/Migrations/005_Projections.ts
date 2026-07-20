@@ -1,8 +1,11 @@
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as Effect from "effect/Effect";
 
+import { getDialect } from "./helpers.ts";
+
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const dialect = yield* getDialect;
 
   yield* sql`
     CREATE TABLE IF NOT EXISTS projection_projects (
@@ -71,25 +74,47 @@ export default Effect.gen(function* () {
     )
   `;
 
-  yield* sql`
-    CREATE TABLE IF NOT EXISTS projection_turns (
-      row_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      thread_id TEXT NOT NULL,
-      turn_id TEXT,
-      pending_message_id TEXT,
-      assistant_message_id TEXT,
-      state TEXT NOT NULL,
-      requested_at TEXT NOT NULL,
-      started_at TEXT,
-      completed_at TEXT,
-      checkpoint_turn_count INTEGER,
-      checkpoint_ref TEXT,
-      checkpoint_status TEXT,
-      checkpoint_files_json TEXT NOT NULL,
-      UNIQUE (thread_id, turn_id),
-      UNIQUE (thread_id, checkpoint_turn_count)
-    )
-  `;
+  if (dialect === "postgresql") {
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS projection_turns (
+        row_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        turn_id TEXT,
+        pending_message_id TEXT,
+        assistant_message_id TEXT,
+        state TEXT NOT NULL,
+        requested_at TEXT NOT NULL,
+        started_at TEXT,
+        completed_at TEXT,
+        checkpoint_turn_count INTEGER,
+        checkpoint_ref TEXT,
+        checkpoint_status TEXT,
+        checkpoint_files_json TEXT NOT NULL,
+        UNIQUE (thread_id, turn_id),
+        UNIQUE (thread_id, checkpoint_turn_count)
+      )
+    `;
+  } else {
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS projection_turns (
+        row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        thread_id TEXT NOT NULL,
+        turn_id TEXT,
+        pending_message_id TEXT,
+        assistant_message_id TEXT,
+        state TEXT NOT NULL,
+        requested_at TEXT NOT NULL,
+        started_at TEXT,
+        completed_at TEXT,
+        checkpoint_turn_count INTEGER,
+        checkpoint_ref TEXT,
+        checkpoint_status TEXT,
+        checkpoint_files_json TEXT NOT NULL,
+        UNIQUE (thread_id, turn_id),
+        UNIQUE (thread_id, checkpoint_turn_count)
+      )
+    `;
+  }
 
   yield* sql`
     CREATE TABLE IF NOT EXISTS projection_pending_approvals (

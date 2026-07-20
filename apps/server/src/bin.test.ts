@@ -24,7 +24,7 @@ import * as ServerConfig from "./config.ts";
 import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
 import { orchestrationHttpApiLayer } from "./orchestration/http.ts";
-import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite.ts";
+import { layerConfig as DatabasePersistenceLayerLive } from "./persistence/Layers/Database.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import {
   makePersistedServerRuntimeState,
@@ -84,6 +84,8 @@ const makeCliTestServerConfig = (baseDir: string) =>
       logWebSocketEvents: false,
       tailscaleServeEnabled: false,
       tailscaleServePort: 443,
+      databaseUrl: undefined,
+      nodeId: "test",
     } satisfies ServerConfig.ServerConfig["Service"];
   });
 
@@ -91,7 +93,7 @@ const makeProjectPersistenceLayer = (config: ServerConfig.ServerConfig["Service"
   Layer.mergeAll(
     OrchestrationLayerLive.pipe(
       Layer.provideMerge(RepositoryIdentityResolver.layer),
-      Layer.provideMerge(SqlitePersistenceLayerLive),
+      Layer.provideMerge(DatabasePersistenceLayerLive),
     ),
     WorkspacePaths.layer,
   ).pipe(Layer.provideMerge(NodeServices.layer), Layer.provide(ServerConfig.layer(config)));
@@ -118,7 +120,7 @@ const withLiveProjectCliServer = <A, E, R>(baseDir: string, run: () => Effect.Ef
     }).pipe(
       Layer.provideMerge(
         EnvironmentAuth.layer.pipe(
-          Layer.provideMerge(SqlitePersistenceLayerLive),
+          Layer.provideMerge(DatabasePersistenceLayerLive),
           Layer.provide(ServerSecretStore.layer),
         ),
       ),

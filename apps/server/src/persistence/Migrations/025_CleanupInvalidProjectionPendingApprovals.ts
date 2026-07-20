@@ -1,19 +1,35 @@
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as Effect from "effect/Effect";
 
+import { getDialect } from "./helpers.ts";
+
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const dialect = yield* getDialect;
 
-  yield* sql`
-    DELETE FROM projection_pending_approvals
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM projection_thread_activities AS activity
-      WHERE activity.kind = 'approval.requested'
-        AND json_extract(activity.payload_json, '$.requestId')
-          = projection_pending_approvals.request_id
-    )
-  `;
+  if (dialect === "postgresql") {
+    yield* sql`
+      DELETE FROM projection_pending_approvals
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM projection_thread_activities AS activity
+        WHERE activity.kind = 'approval.requested'
+          AND activity.payload_json::jsonb->>'requestId'
+            = projection_pending_approvals.request_id
+      )
+    `;
+  } else {
+    yield* sql`
+      DELETE FROM projection_pending_approvals
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM projection_thread_activities AS activity
+        WHERE activity.kind = 'approval.requested'
+          AND json_extract(activity.payload_json, '$.requestId')
+            = projection_pending_approvals.request_id
+      )
+    `;
+  }
 
   yield* sql`
     UPDATE projection_threads
