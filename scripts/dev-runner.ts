@@ -254,6 +254,7 @@ export function createDevRunnerEnv({
       PORT: String(webPort),
       VITE_DEV_SERVER_URL:
         devUrl?.toString() ??
+        baseEnv.VITE_DEV_SERVER_URL ??
         `http://${isDesktopMode ? DESKTOP_DEV_LOOPBACK_HOST : "localhost"}:${webPort}`,
     };
 
