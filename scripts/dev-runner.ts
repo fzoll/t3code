@@ -265,8 +265,9 @@ export function createDevRunnerEnv({
 
     if (!isDesktopMode) {
       output.T3CODE_PORT = String(serverPort);
-      output.VITE_HTTP_URL = `http://localhost:${serverPort}`;
-      output.VITE_WS_URL = `ws://localhost:${serverPort}`;
+      const serverHost = host ?? "localhost";
+      output.VITE_HTTP_URL = baseEnv.VITE_HTTP_URL ?? `http://${serverHost}:${serverPort}`;
+      output.VITE_WS_URL = baseEnv.VITE_WS_URL ?? `ws://${serverHost}:${serverPort}`;
     } else {
       output.T3CODE_PORT = String(serverPort);
       output.VITE_HTTP_URL = `http://${DESKTOP_DEV_LOOPBACK_HOST}:${serverPort}`;
