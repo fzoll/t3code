@@ -87,6 +87,7 @@ function resolveDevProxyTarget(wsUrl: string | undefined): string | undefined {
 }
 
 const devProxyTarget = resolveDevProxyTarget(configuredWsUrl);
+const isRemoteDev = process.env.HOST === "0.0.0.0" || process.env.T3CODE_HOST === "0.0.0.0";
 
 export default defineConfig(() => {
   return {
@@ -118,7 +119,7 @@ export default defineConfig(() => {
     },
     define: {
       // In dev mode, tell the web app where the WebSocket server lives
-      "import.meta.env.VITE_WS_URL": JSON.stringify(configuredWsUrl ?? ""),
+      "import.meta.env.VITE_WS_URL": JSON.stringify(isRemoteDev ? "" : (configuredWsUrl ?? "")),
       "import.meta.env.VITE_T3CODE_RELAY_URL": JSON.stringify(configuredRelayUrl),
       "import.meta.env.VITE_CLERK_PUBLISHABLE_KEY": JSON.stringify(configuredClerkPublishableKey),
       "import.meta.env.VITE_CLERK_JWT_TEMPLATE": JSON.stringify(configuredClerkJwtTemplate),
