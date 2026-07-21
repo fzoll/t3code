@@ -39,6 +39,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           scripts_json,
           environment_json,
           is_auto,
+          "group",
           created_at,
           updated_at,
           deleted_at
@@ -51,6 +52,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           ${JSON.stringify(row.scripts)},
           ${JSON.stringify(row.environment)},
           ${row.isAuto ? 1 : 0},
+          ${row.group},
           ${row.createdAt},
           ${row.updatedAt},
           ${row.deletedAt}
@@ -63,6 +65,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           scripts_json = excluded.scripts_json,
           environment_json = excluded.environment_json,
           is_auto = excluded.is_auto,
+          "group" = excluded."group",
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
           deleted_at = excluded.deleted_at
@@ -82,6 +85,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           scripts_json AS "scripts",
           environment_json AS "environment",
           is_auto AS "isAuto",
+          "group",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
@@ -103,6 +107,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           scripts_json AS "scripts",
           environment_json AS "environment",
           is_auto AS "isAuto",
+          "group",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"

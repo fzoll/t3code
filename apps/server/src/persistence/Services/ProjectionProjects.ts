@@ -28,6 +28,7 @@ export const ProjectionProject = Schema.Struct({
   scripts: Schema.Array(ProjectScript),
   environment: ProviderInstanceEnvironment,
   isAuto: Schema.Number,
+  group: Schema.NullOr(Schema.String),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),

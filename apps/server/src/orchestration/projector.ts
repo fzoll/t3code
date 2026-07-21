@@ -210,6 +210,7 @@ export function projectEvent(
             scripts: payload.scripts,
             environment: payload.environment,
             isAuto: payload.isAuto,
+            group: payload.group,
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
             deletedAt: null,
@@ -246,6 +247,7 @@ export function projectEvent(
                     ? { environment: payload.environment }
                     : {}),
                   ...(payload.isAuto !== undefined ? { isAuto: payload.isAuto } : {}),
+                  ...(payload.group !== undefined ? { group: payload.group } : {}),
                   updatedAt: payload.updatedAt,
                 }
               : project,

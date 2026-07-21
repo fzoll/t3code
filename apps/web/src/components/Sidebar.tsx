@@ -1229,6 +1229,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   >("inherit");
   const [projectEnvTarget, setProjectEnvTarget] = useState<SidebarProjectGroupMember | null>(null);
   const [projectIsAuto, setProjectIsAuto] = useState(false);
+  const [projectGroup, setProjectGroup] = useState("");
   const projectEnvGetValuesRef = useRef<
     () => ReadonlyArray<import("@t3tools/contracts").ProviderInstanceEnvironmentVariable>
   >(() => []);
@@ -1641,6 +1642,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 return;
               case "environment":
                 setProjectIsAuto(member.isAuto ?? false);
+                setProjectGroup(member.group ?? "");
                 setProjectEnvTarget(member);
                 return;
               case "delete":
@@ -2554,6 +2556,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             </DialogDescription>
           </DialogHeader>
           <DialogPanel className="space-y-4">
+            <div className="grid gap-1.5">
+              <span className="text-xs font-medium text-foreground">Group</span>
+              <Input
+                aria-label="Project group"
+                value={projectGroup}
+                onChange={(event) => setProjectGroup(event.target.value)}
+                placeholder="e.g. work, personal, automation"
+              />
+              <span className="text-xs text-muted-foreground">
+                Projects with the same group name are grouped together in the sidebar.
+              </span>
+            </div>
             <div className="flex items-center gap-3">
               <Checkbox
                 checked={projectIsAuto}
@@ -2600,6 +2614,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                     projectId: projectEnvTarget.id,
                     environment: envValues,
                     isAuto: projectIsAuto,
+                    group: projectGroup.trim() || null,
                   },
                 });
                 if (result._tag === "Failure") {
@@ -3239,29 +3254,56 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           </DndContext>
         ) : (
           <SidebarMenu ref={attachProjectListAutoAnimateRef}>
-            {sortedProjects.map((project) => (
-              <SidebarProjectListRow
-                key={project.projectKey}
-                project={project}
-                isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
-                activeRouteThreadKey={
-                  activeRouteProjectKey === project.projectKey ? routeThreadKey : null
-                }
-                newThreadShortcutLabel={newThreadShortcutLabel}
-                handleNewThread={handleNewThread}
-                archiveThread={archiveThread}
-                deleteThread={deleteThread}
-                threadJumpLabelByKey={threadJumpLabelByKey}
-                attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                expandThreadListForProject={expandThreadListForProject}
-                collapseThreadListForProject={collapseThreadListForProject}
-                dragInProgressRef={dragInProgressRef}
-                suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
-                isManualProjectSorting={isManualProjectSorting}
-                dragHandleProps={null}
-              />
-            ))}
+            {(() => {
+              const grouped = new Map<string, SidebarProjectSnapshot[]>();
+              for (const project of sortedProjects) {
+                const groupKey = project.memberProjects[0]?.group ?? "";
+                const list = grouped.get(groupKey) ?? [];
+                list.push(project);
+                grouped.set(groupKey, list);
+              }
+              const ungrouped = grouped.get("") ?? [];
+              grouped.delete("");
+              const groupEntries = [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+              const renderProject = (project: (typeof sortedProjects)[number]) => (
+                <SidebarProjectListRow
+                  key={project.projectKey}
+                  project={project}
+                  isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
+                  activeRouteThreadKey={
+                    activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                  }
+                  newThreadShortcutLabel={newThreadShortcutLabel}
+                  handleNewThread={handleNewThread}
+                  archiveThread={archiveThread}
+                  deleteThread={deleteThread}
+                  threadJumpLabelByKey={threadJumpLabelByKey}
+                  attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                  expandThreadListForProject={expandThreadListForProject}
+                  collapseThreadListForProject={collapseThreadListForProject}
+                  dragInProgressRef={dragInProgressRef}
+                  suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                  suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
+                  isManualProjectSorting={isManualProjectSorting}
+                  dragHandleProps={null}
+                />
+              );
+
+              return (
+                <>
+                  {groupEntries.map(([groupName, projects]) => (
+                    <li key={`group:${groupName}`} className="space-y-0.5">
+                      <div className="flex h-6 items-center px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                        {groupName}
+                      </div>
+                      <ul className="space-y-0.5 pl-2">{projects.map(renderProject)}</ul>
+                    </li>
+                  ))}
+                  {ungrouped.map(renderProject)}
+                </>
+              );
+            })()}
           </SidebarMenu>
         )}
 
