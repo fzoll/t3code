@@ -286,6 +286,7 @@ function mapProjectShellRow(
     scripts: row.scripts,
     environment: row.environment ?? [],
     isAuto: (row.isAuto ?? 0) !== 0,
+    group: row.group ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -361,6 +362,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           scripts_json AS "scripts",
           environment_json AS "environment",
           is_auto AS "isAuto",
+          "group",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
@@ -813,6 +815,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           scripts_json AS "scripts",
           environment_json AS "environment",
           is_auto AS "isAuto",
+          "group",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
@@ -837,6 +840,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           scripts_json AS "scripts",
           environment_json AS "environment",
           is_auto AS "isAuto",
+          "group",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
@@ -1323,6 +1327,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 scripts: row.scripts,
                 environment: row.environment ?? [],
                 isAuto: (row.isAuto ?? 0) !== 0,
+                group: row.group ?? null,
                 createdAt: row.createdAt,
                 updatedAt: row.updatedAt,
                 deletedAt: row.deletedAt,
@@ -1453,6 +1458,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   scripts: row.scripts,
                   environment: row.environment ?? [],
                   isAuto: (row.isAuto ?? 0) !== 0,
+                  group: row.group ?? null,
                   createdAt: row.createdAt,
                   updatedAt: row.updatedAt,
                   deletedAt: row.deletedAt,
@@ -1935,6 +1941,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                     scripts: option.value.scripts,
                     environment: option.value.environment ?? [],
                     isAuto: (option.value.isAuto ?? 0) !== 0,
+                    group: option.value.group ?? null,
                     createdAt: option.value.createdAt,
                     updatedAt: option.value.updatedAt,
                     deletedAt: option.value.deletedAt,

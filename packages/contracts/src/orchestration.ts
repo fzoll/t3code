@@ -218,6 +218,9 @@ export const OrchestrationProject = Schema.Struct({
   scripts: Schema.Array(ProjectScript),
   environment: ProviderInstanceEnvironment.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   isAuto: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  group: Schema.NullOr(TrimmedNonEmptyString).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
@@ -409,6 +412,9 @@ export const OrchestrationProjectShell = Schema.Struct({
   scripts: Schema.Array(ProjectScript),
   environment: ProviderInstanceEnvironment.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   isAuto: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  group: Schema.NullOr(TrimmedNonEmptyString).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -541,6 +547,7 @@ export const ProjectCreateCommand = Schema.Struct({
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   environment: Schema.optional(ProviderInstanceEnvironment),
   isAuto: Schema.optional(Schema.Boolean),
+  group: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   createdAt: IsoDateTime,
 });
 
@@ -554,6 +561,7 @@ const ProjectMetaUpdateCommand = Schema.Struct({
   scripts: Schema.optional(Schema.Array(ProjectScript)),
   environment: Schema.optional(ProviderInstanceEnvironment),
   isAuto: Schema.optional(Schema.Boolean),
+  group: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
 });
 
 const ProjectDeleteCommand = Schema.Struct({
@@ -976,6 +984,9 @@ export const ProjectCreatedPayload = Schema.Struct({
   scripts: Schema.Array(ProjectScript),
   environment: ProviderInstanceEnvironment.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   isAuto: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  group: Schema.NullOr(TrimmedNonEmptyString).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -989,6 +1000,7 @@ export const ProjectMetaUpdatedPayload = Schema.Struct({
   scripts: Schema.optional(Schema.Array(ProjectScript)),
   environment: Schema.optional(ProviderInstanceEnvironment),
   isAuto: Schema.optional(Schema.Boolean),
+  group: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   updatedAt: IsoDateTime,
 });
 

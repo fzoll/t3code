@@ -48,6 +48,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     scripts: [],
     environment: [],
     isAuto: false,
+    group: null,
     ...overrides,
   };
 }

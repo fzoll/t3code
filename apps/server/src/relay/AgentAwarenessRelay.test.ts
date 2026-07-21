@@ -431,6 +431,7 @@ describe.sequential("signRelayAgentActivityPublishProof", () => {
           scripts: [],
           environment: [],
           isAuto: false,
+          group: null,
           createdAt: now,
           updatedAt: now,
         } satisfies OrchestrationProjectShell;
@@ -591,6 +592,7 @@ describe.sequential("signRelayAgentActivityPublishProof", () => {
           scripts: [],
           environment: [],
           isAuto: false,
+          group: null,
           createdAt: now,
           updatedAt: now,
         } satisfies OrchestrationProjectShell;

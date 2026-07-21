@@ -253,6 +253,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           scripts: [],
           environment: command.environment ?? [],
           isAuto: command.isAuto ?? false,
+          group: command.group ?? null,
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },
@@ -292,6 +293,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           ...(command.scripts !== undefined ? { scripts: command.scripts } : {}),
           ...(command.environment !== undefined ? { environment: command.environment } : {}),
           ...(command.isAuto !== undefined ? { isAuto: command.isAuto } : {}),
+          ...(command.group !== undefined ? { group: command.group } : {}),
           updatedAt: occurredAt,
         },
       };
