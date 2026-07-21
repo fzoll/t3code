@@ -149,6 +149,7 @@ it.effect("resolveAutoBootstrapWelcomeTargets returns existing project and threa
               defaultModelSelection: ServerRuntimeStartup.getAutoBootstrapDefaultModelSelection(),
               scripts: [],
               environment: [],
+              isAuto: false,
               createdAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
               deletedAt: null,

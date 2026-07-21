@@ -134,6 +134,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           defaultModelSelection: command.defaultModelSelection ?? null,
           scripts: [],
           environment: command.environment ?? [],
+          isAuto: command.isAuto ?? false,
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },
@@ -172,6 +173,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
             : {}),
           ...(command.scripts !== undefined ? { scripts: command.scripts } : {}),
           ...(command.environment !== undefined ? { environment: command.environment } : {}),
+          ...(command.isAuto !== undefined ? { isAuto: command.isAuto } : {}),
           updatedAt: occurredAt,
         },
       };

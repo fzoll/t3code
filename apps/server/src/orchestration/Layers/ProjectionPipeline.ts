@@ -497,6 +497,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             defaultModelSelection: event.payload.defaultModelSelection,
             scripts: event.payload.scripts,
             environment: event.payload.environment,
+            isAuto: event.payload.isAuto ? 1 : 0,
             createdAt: event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
             deletedAt: null,
@@ -523,6 +524,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...(event.payload.environment !== undefined
               ? { environment: event.payload.environment }
               : {}),
+            ...(event.payload.isAuto !== undefined ? { isAuto: event.payload.isAuto ? 1 : 0 } : {}),
             updatedAt: event.payload.updatedAt,
           });
           return;

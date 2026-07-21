@@ -38,6 +38,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           default_model_selection_json,
           scripts_json,
           environment_json,
+          is_auto,
           created_at,
           updated_at,
           deleted_at
@@ -49,6 +50,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           ${row.defaultModelSelection !== null ? JSON.stringify(row.defaultModelSelection) : null},
           ${JSON.stringify(row.scripts)},
           ${JSON.stringify(row.environment)},
+          ${row.isAuto ? 1 : 0},
           ${row.createdAt},
           ${row.updatedAt},
           ${row.deletedAt}
@@ -60,6 +62,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           default_model_selection_json = excluded.default_model_selection_json,
           scripts_json = excluded.scripts_json,
           environment_json = excluded.environment_json,
+          is_auto = excluded.is_auto,
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
           deleted_at = excluded.deleted_at
@@ -78,6 +81,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
           environment_json AS "environment",
+          is_auto AS "isAuto",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
@@ -98,6 +102,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
           environment_json AS "environment",
+          is_auto AS "isAuto",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"

@@ -216,6 +216,7 @@ export const OrchestrationProject = Schema.Struct({
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
   environment: ProviderInstanceEnvironment.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  isAuto: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
@@ -384,6 +385,7 @@ export const OrchestrationProjectShell = Schema.Struct({
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
   environment: ProviderInstanceEnvironment.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  isAuto: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -507,6 +509,7 @@ export const ProjectCreateCommand = Schema.Struct({
   createWorkspaceRootIfMissing: Schema.optional(Schema.Boolean),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   environment: Schema.optional(ProviderInstanceEnvironment),
+  isAuto: Schema.optional(Schema.Boolean),
   createdAt: IsoDateTime,
 });
 
@@ -519,6 +522,7 @@ const ProjectMetaUpdateCommand = Schema.Struct({
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
   environment: Schema.optional(ProviderInstanceEnvironment),
+  isAuto: Schema.optional(Schema.Boolean),
 });
 
 const ProjectDeleteCommand = Schema.Struct({
@@ -857,6 +861,7 @@ export const ProjectCreatedPayload = Schema.Struct({
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
   environment: ProviderInstanceEnvironment.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  isAuto: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -869,6 +874,7 @@ export const ProjectMetaUpdatedPayload = Schema.Struct({
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
   environment: Schema.optional(ProviderInstanceEnvironment),
+  isAuto: Schema.optional(Schema.Boolean),
   updatedAt: IsoDateTime,
 });
 

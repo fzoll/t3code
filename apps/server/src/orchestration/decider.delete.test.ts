@@ -41,6 +41,7 @@ const seedReadModel = Effect.gen(function* () {
       defaultModelSelection: null,
       scripts: [],
       environment: [],
+      isAuto: false,
       createdAt: now,
       updatedAt: now,
     },

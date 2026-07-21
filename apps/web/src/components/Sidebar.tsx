@@ -124,6 +124,7 @@ import {
   resolveThreadRouteTarget,
 } from "../threadRoutes";
 import { stackedThreadToast, toastManager } from "./ui/toast";
+import { Checkbox } from "./ui/checkbox";
 import { EnvironmentVariableEditor } from "./EnvironmentVariableEditor";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
@@ -323,6 +324,7 @@ function buildThreadJumpLabelMap(input: {
 
 interface SidebarThreadRowProps {
   thread: SidebarThreadSummary;
+  isAutoProject: boolean;
   projectCwd: string | null;
   orderedProjectThreadKeys: readonly string[];
   isActive: boolean;
@@ -468,6 +470,7 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
       ...thread,
       lastVisitedAt,
     },
+    isAutoProject: props.isAutoProject,
   });
   const pr = resolveThreadPr(thread.branch, gitStatus.data);
   const prStatus = prStatusIndicator(pr, gitStatus.data?.sourceControlProvider);
@@ -893,6 +896,7 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
 
 interface SidebarProjectThreadListProps {
   projectKey: string;
+  isAutoProject: boolean;
   projectExpanded: boolean;
   hasOverflowingThreads: boolean;
   hiddenThreadStatus: ThreadStatusPill | null;
@@ -1003,6 +1007,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
             <SidebarThreadRow
               key={threadKey}
               thread={thread}
+              isAutoProject={props.isAutoProject}
               projectCwd={projectCwd}
               orderedProjectThreadKeys={orderedProjectThreadKeys}
               isActive={activeRouteThreadKey === threadKey}
@@ -1223,6 +1228,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     SidebarProjectGroupingMode | "inherit"
   >("inherit");
   const [projectEnvTarget, setProjectEnvTarget] = useState<SidebarProjectGroupMember | null>(null);
+  const [projectIsAuto, setProjectIsAuto] = useState(false);
   const projectEnvGetValuesRef = useRef<
     () => ReadonlyArray<import("@t3tools/contracts").ProviderInstanceEnvironmentVariable>
   >(() => []);
@@ -1266,11 +1272,15 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       const lastVisitedAt = lastVisitedAtByThreadKey.get(
         scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
       );
+      const memberProject = project.memberProjects.find(
+        (m) => m.environmentId === thread.environmentId,
+      );
       return resolveThreadStatusPill({
         thread: {
           ...thread,
           ...(lastVisitedAt !== null && lastVisitedAt !== undefined ? { lastVisitedAt } : {}),
         },
+        isAutoProject: memberProject?.isAuto ?? false,
       });
     };
     const visibleProjectThreads = sortThreads(
@@ -1318,11 +1328,15 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       const lastVisitedAt = lastVisitedAtByThreadKey.get(
         scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
       );
+      const memberProject = project.memberProjects.find(
+        (m) => m.environmentId === thread.environmentId,
+      );
       return resolveThreadStatusPill({
         thread: {
           ...thread,
           ...(lastVisitedAt !== null && lastVisitedAt !== undefined ? { lastVisitedAt } : {}),
         },
+        isAutoProject: memberProject?.isAuto ?? false,
       });
     };
     const hasOverflowingThreads = visibleProjectThreads.length > sidebarThreadPreviewCount;
@@ -1626,6 +1640,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 copyPathToClipboard(member.workspaceRoot, { path: member.workspaceRoot });
                 return;
               case "environment":
+                setProjectIsAuto(member.isAuto ?? false);
                 setProjectEnvTarget(member);
                 return;
               case "delete":
@@ -1678,7 +1693,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           [
             buildTargetedItem("rename", "Rename"),
             buildTargetedItem("grouping", "Group into..."),
-            buildTargetedItem("environment", "Environment Variables"),
+            buildTargetedItem("environment", "Project Settings"),
             buildTargetedItem("copy-path", "Copy Path"),
             buildTargetedItem("delete", "Remove", {
               destructive: true,
@@ -2367,6 +2382,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
       <SidebarProjectThreadList
         projectKey={project.projectKey}
+        isAutoProject={project.memberProjects.some((m) => m.isAuto)}
         projectExpanded={projectExpanded}
         hasOverflowingThreads={hasOverflowingThreads}
         hiddenThreadStatus={hiddenThreadStatus}
@@ -2530,14 +2546,28 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       >
         <DialogPopup className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Project environment variables</DialogTitle>
+            <DialogTitle>Project settings</DialogTitle>
             <DialogDescription>
               {projectEnvTarget
-                ? `Configure environment variables for ${projectEnvTarget.title}. These are passed to Claude Code sessions started in this project.`
-                : "Configure project environment variables."}
+                ? `Configure settings for ${projectEnvTarget.title}.`
+                : "Configure project settings."}
             </DialogDescription>
           </DialogHeader>
           <DialogPanel className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Checkbox
+                checked={projectIsAuto}
+                onCheckedChange={(checked) => setProjectIsAuto(Boolean(checked))}
+                aria-label="Automated project"
+              />
+              <div className="grid gap-0.5">
+                <span className="text-xs font-medium text-foreground">Automated project</span>
+                <span className="text-xs text-muted-foreground">
+                  Threads in this project won't show unread notifications. Use for cc_runner
+                  automated sessions.
+                </span>
+              </div>
+            </div>
             {projectEnvTarget && (
               <EnvironmentVariableEditor
                 environment={projectEnvTarget.environment ?? []}
@@ -2569,6 +2599,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                   input: {
                     projectId: projectEnvTarget.id,
                     environment: envValues,
+                    isAuto: projectIsAuto,
                   },
                 });
                 if (result._tag === "Failure") {

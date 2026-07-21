@@ -43,6 +43,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     updatedAt: "2026-01-01T00:00:00.000Z",
     scripts: [],
     environment: [],
+    isAuto: false,
     ...overrides,
   };
 }

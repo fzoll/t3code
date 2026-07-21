@@ -27,6 +27,7 @@ export const ProjectionProject = Schema.Struct({
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
   environment: ProviderInstanceEnvironment,
+  isAuto: Schema.Number,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
