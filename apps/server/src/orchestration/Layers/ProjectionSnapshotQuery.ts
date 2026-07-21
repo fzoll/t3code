@@ -69,6 +69,7 @@ const ProjectionProjectDbRowSchema = ProjectionProject.mapFields(
     defaultModelSelection: Schema.NullOr(Schema.fromJsonString(ModelSelection)),
     scripts: Schema.fromJsonString(Schema.Array(ProjectScript)),
     environment: Schema.fromJsonString(ProviderInstanceEnvironment),
+    isAuto: Schema.Number,
   }),
 );
 const ProjectionThreadMessageDbRowSchema = ProjectionThreadMessage.mapFields(
@@ -284,6 +285,7 @@ function mapProjectShellRow(
     defaultModelSelection: row.defaultModelSelection,
     scripts: row.scripts,
     environment: row.environment ?? [],
+    isAuto: (row.isAuto ?? 0) !== 0,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -358,6 +360,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
           environment_json AS "environment",
+          is_auto AS "isAuto",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
@@ -809,6 +812,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
           environment_json AS "environment",
+          is_auto AS "isAuto",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
@@ -832,6 +836,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
           environment_json AS "environment",
+          is_auto AS "isAuto",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           deleted_at AS "deletedAt"
@@ -1317,6 +1322,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 defaultModelSelection: row.defaultModelSelection,
                 scripts: row.scripts,
                 environment: row.environment ?? [],
+                isAuto: (row.isAuto ?? 0) !== 0,
                 createdAt: row.createdAt,
                 updatedAt: row.updatedAt,
                 deletedAt: row.deletedAt,
@@ -1446,6 +1452,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   defaultModelSelection: row.defaultModelSelection,
                   scripts: row.scripts,
                   environment: row.environment ?? [],
+                  isAuto: (row.isAuto ?? 0) !== 0,
                   createdAt: row.createdAt,
                   updatedAt: row.updatedAt,
                   deletedAt: row.deletedAt,
@@ -1927,6 +1934,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                     defaultModelSelection: option.value.defaultModelSelection,
                     scripts: option.value.scripts,
                     environment: option.value.environment ?? [],
+                    isAuto: (option.value.isAuto ?? 0) !== 0,
                     createdAt: option.value.createdAt,
                     updatedAt: option.value.updatedAt,
                     deletedAt: option.value.deletedAt,

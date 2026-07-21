@@ -215,6 +215,7 @@ export function projectEvent(
             defaultModelSelection: payload.defaultModelSelection,
             scripts: payload.scripts,
             environment: payload.environment,
+            isAuto: payload.isAuto,
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
             deletedAt: null,
@@ -250,6 +251,7 @@ export function projectEvent(
                   ...(payload.environment !== undefined
                     ? { environment: payload.environment }
                     : {}),
+                  ...(payload.isAuto !== undefined ? { isAuto: payload.isAuto } : {}),
                   updatedAt: payload.updatedAt,
                 }
               : project,
