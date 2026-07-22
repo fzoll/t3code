@@ -176,7 +176,6 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           ...(command.environment !== undefined ? { environment: command.environment } : {}),
           ...(command.isAuto !== undefined ? { isAuto: command.isAuto } : {}),
           ...(command.group !== undefined ? { group: command.group } : {}),
-          ...(() => { console.log("[DEBUG] project.meta.update group:", JSON.stringify({ group: command.group, hasGroup: "group" in command, keys: Object.keys(command) })); return {}; })(),
           updatedAt: occurredAt,
         },
       };
