@@ -48,7 +48,7 @@ export const makeKimiAcpRuntime = (
       AcpSessionRuntime.layer({
         ...input,
         spawn: buildKimiAcpSpawnInput(input.kimiSettings, input.cwd, input.environment),
-        authMethodId: "default",
+        authMethodId: "login",
       }).pipe(
         Layer.provide(
           Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, input.childProcessSpawner),

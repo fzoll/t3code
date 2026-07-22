@@ -255,47 +255,21 @@ export const checkKimiProviderStatus = Effect.fn("checkKimiProviderStatus")(func
     Effect.timeoutOption(KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS),
     Effect.exit,
   );
+  let models = fallbackModels;
   if (Exit.isFailure(discoveryExit)) {
-    yield* Effect.logWarning("Kimi ACP model discovery failed", {
+    yield* Effect.logWarning("Kimi ACP model discovery failed; using built-in models.", {
       errorTag: causeErrorTag(discoveryExit.cause),
     });
-    return buildServerProvider({
-      presentation: KIMI_PRESENTATION,
-      enabled: kimiSettings.enabled,
-      checkedAt,
-      models: fallbackModels,
-      probe: {
-        installed: true,
-        version,
-        status: "error",
-        auth: { status: "unknown" },
-        message: "Kimi CLI is installed but ACP startup failed. Check server logs for details.",
-      },
-    });
-  }
-  if (Option.isNone(discoveryExit.value)) {
+  } else if (Option.isNone(discoveryExit.value)) {
     yield* Effect.logWarning(
-      `Kimi ACP model discovery timed out after ${KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS}ms.`,
+      `Kimi ACP model discovery timed out after ${KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS}ms; using built-in models.`,
     );
-    return buildServerProvider({
-      presentation: KIMI_PRESENTATION,
-      enabled: kimiSettings.enabled,
-      checkedAt,
-      models: fallbackModels,
-      probe: {
-        installed: true,
-        version,
-        status: "error",
-        auth: { status: "unknown" },
-        message: `Kimi CLI is installed but ACP startup timed out after ${KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS}ms.`,
-      },
-    });
+  } else {
+    const discoveredModels = discoveryExit.value.value;
+    if (discoveredModels.length > 0) {
+      models = kimiModelsFromSettings(kimiSettings.customModels, discoveredModels);
+    }
   }
-  const discoveredModels = discoveryExit.value.value;
-  const models =
-    discoveredModels.length > 0
-      ? kimiModelsFromSettings(kimiSettings.customModels, discoveredModels)
-      : fallbackModels;
 
   return buildServerProvider({
     presentation: KIMI_PRESENTATION,
