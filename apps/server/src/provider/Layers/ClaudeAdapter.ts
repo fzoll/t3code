@@ -3412,7 +3412,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         runPromise(canUseToolEffect(toolName, toolInput, callbackOptions));
 
       const claudeBinaryPath = claudeSdkExecutablePath;
-      const extraArgs = parseCliArgs(claudeSettings.launchArgs).flags;
+      const parsedArgs = parseCliArgs(claudeSettings.launchArgs).flags;
+      const remoteControlAtStartup = "remote-control" in parsedArgs || "rc" in parsedArgs;
+      const { "remote-control": _rc, rc: _rcShort, ...extraArgs } = parsedArgs;
       const modelSelection =
         input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;
       const caps = getClaudeModelCapabilities(modelSelection?.model);
@@ -3472,6 +3474,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           ? mergeProviderInstanceEnvironment(input.projectEnvironment, claudeEnvironment)
           : claudeEnvironment,
         ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
+        ...(remoteControlAtStartup ? { remoteControlAtStartup: true } : {}),
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
         ...(mcpSession
           ? {
