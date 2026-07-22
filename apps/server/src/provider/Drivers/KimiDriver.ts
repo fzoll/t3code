@@ -101,6 +101,7 @@ export const KimiDriver: ProviderDriver<KimiSettings, KimiDriverEnv> = {
         continuationGroupKey: continuationIdentity.continuationKey,
       });
       const effectiveConfig = { ...config, enabled } satisfies KimiSettings;
+
       const maintenanceCapabilities = yield* resolveProviderMaintenanceCapabilitiesEffect(UPDATE, {
         binaryPath: effectiveConfig.binaryPath,
         env: processEnv,
@@ -111,6 +112,7 @@ export const KimiDriver: ProviderDriver<KimiSettings, KimiDriverEnv> = {
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
         instanceId,
       });
+
       const textGeneration = yield* makeKimiTextGeneration(effectiveConfig, processEnv);
 
       const checkProvider = checkKimiProviderStatus(effectiveConfig, processEnv).pipe(

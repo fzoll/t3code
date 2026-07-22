@@ -4,12 +4,10 @@ import {
   type ServerProvider,
   type ServerProviderModel,
 } from "@t3tools/contracts";
-import type * as EffectAcpSchema from "effect-acp/schema";
 import { causeErrorTag } from "@t3tools/shared/observability";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import { HttpClient } from "effect/unstable/http";
@@ -29,7 +27,6 @@ import {
   enrichProviderSnapshotWithVersionAdvisory,
   type ProviderMaintenanceCapabilities,
 } from "../providerMaintenance.ts";
-import { makeKimiAcpRuntime, resolveKimiAcpBaseModelId } from "../acp/KimiAcpSupport.ts";
 
 const KIMI_PRESENTATION = {
   displayName: "Kimi",
@@ -42,7 +39,6 @@ const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
 });
 
 const VERSION_PROBE_TIMEOUT_MS = 10_000;
-const KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS = 15_000;
 
 const KIMI_BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
@@ -98,47 +94,6 @@ function kimiModelsFromSettings(
 ): ReadonlyArray<ServerProviderModel> {
   return providerModelsFromSettings(builtInModels, customModels ?? [], EMPTY_CAPABILITIES);
 }
-
-function buildKimiDiscoveredModelsFromSessionModelState(
-  modelState: EffectAcpSchema.SessionModelState | null | undefined,
-): ReadonlyArray<ServerProviderModel> {
-  if (!modelState || modelState.availableModels.length === 0) {
-    return [];
-  }
-  const seen = new Set<string>();
-  return modelState.availableModels
-    .map((model): ServerProviderModel | undefined => {
-      const slug = resolveKimiAcpBaseModelId(model.modelId);
-      if (!slug || seen.has(slug)) {
-        return undefined;
-      }
-      seen.add(slug);
-      return {
-        slug,
-        name: model.name.trim() || slug,
-        isCustom: false,
-        capabilities: EMPTY_CAPABILITIES,
-      };
-    })
-    .filter((model): model is ServerProviderModel => model !== undefined);
-}
-
-const discoverKimiModelsViaAcp = (
-  kimiSettings: KimiSettings,
-  environment: NodeJS.ProcessEnv = process.env,
-) =>
-  Effect.gen(function* () {
-    const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const acp = yield* makeKimiAcpRuntime({
-      kimiSettings,
-      environment,
-      childProcessSpawner,
-      cwd: process.cwd(),
-      clientInfo: { name: "t3-code-provider-probe", version: "0.0.0" },
-    });
-    const started = yield* acp.start();
-    return buildKimiDiscoveredModelsFromSessionModelState(started.sessionSetupResult.models);
-  }).pipe(Effect.scoped);
 
 const runKimiVersionCommand = (
   kimiSettings: KimiSettings,
@@ -251,25 +206,10 @@ export const checkKimiProviderStatus = Effect.fn("checkKimiProviderStatus")(func
     });
   }
 
-  const discoveryExit = yield* discoverKimiModelsViaAcp(kimiSettings, environment).pipe(
-    Effect.timeoutOption(KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS),
-    Effect.exit,
-  );
-  let models = fallbackModels;
-  if (Exit.isFailure(discoveryExit)) {
-    yield* Effect.logWarning("Kimi ACP model discovery failed; using built-in models.", {
-      errorTag: causeErrorTag(discoveryExit.cause),
-    });
-  } else if (Option.isNone(discoveryExit.value)) {
-    yield* Effect.logWarning(
-      `Kimi ACP model discovery timed out after ${KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS}ms; using built-in models.`,
-    );
-  } else {
-    const discoveredModels = discoveryExit.value.value;
-    if (discoveredModels.length > 0) {
-      models = kimiModelsFromSettings(kimiSettings.customModels, discoveredModels);
-    }
-  }
+  // Kimi ACP session/new blocks indefinitely on some platforms; skip
+  // runtime model discovery and use built-in models until Kimi ACP
+  // session startup is reliable.
+  const models = fallbackModels;
 
   return buildServerProvider({
     presentation: KIMI_PRESENTATION,
