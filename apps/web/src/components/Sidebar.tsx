@@ -3268,18 +3268,30 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         ) : (
           <SidebarMenu ref={attachProjectListAutoAnimateRef}>
             {(() => {
-              const grouped = new Map<string, SidebarProjectSnapshot[]>();
-              for (const project of sortedProjects) {
-                const groupKey = project.memberProjects[0]?.group ?? "";
-                const list = grouped.get(groupKey) ?? [];
-                list.push(project);
-                grouped.set(groupKey, list);
+              interface GroupNode {
+                children: Map<string, GroupNode>;
+                projects: SidebarProjectSnapshot[];
               }
-              const ungrouped = grouped.get("") ?? [];
-              grouped.delete("");
-              const groupEntries = [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
-              const renderProject = (project: (typeof sortedProjects)[number]) => (
+              const root: GroupNode = { children: new Map(), projects: [] };
+              for (const project of sortedProjects) {
+                const groupPath = project.memberProjects[0]?.group ?? "";
+                if (!groupPath) {
+                  root.projects.push(project);
+                  continue;
+                }
+                const segments = groupPath.split("/").filter(Boolean);
+                let node = root;
+                for (const segment of segments) {
+                  if (!node.children.has(segment)) {
+                    node.children.set(segment, { children: new Map(), projects: [] });
+                  }
+                  node = node.children.get(segment)!;
+                }
+                node.projects.push(project);
+              }
+
+              const renderProject = (project: SidebarProjectSnapshot) => (
                 <SidebarProjectListRow
                   key={project.projectKey}
                   project={project}
@@ -3303,32 +3315,63 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 />
               );
 
+              const countProjects = (node: GroupNode): number =>
+                node.projects.length +
+                [...node.children.values()].reduce((sum, child) => sum + countProjects(child), 0);
+
+              const renderGroupNode = (
+                name: string,
+                node: GroupNode,
+                path: string,
+                depth: number,
+              ): React.ReactNode => {
+                const fullPath = path ? `${path}/${name}` : name;
+                const isCollapsed = collapsedGroups.has(fullPath);
+                const total = countProjects(node);
+                const sortedChildren = [...node.children.entries()].sort((a, b) =>
+                  a[0].localeCompare(b[0]),
+                );
+
+                return (
+                  <li key={`group:${fullPath}`} className="space-y-0.5">
+                    <button
+                      type="button"
+                      className="flex h-6 w-full items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                      style={{ paddingLeft: `${depth * 12 + 8}px` }}
+                      onClick={() => toggleGroup(fullPath)}
+                    >
+                      <ChevronRightIcon
+                        className={`size-3 shrink-0 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+                      />
+                      {name}
+                      <span className="ml-auto pr-2 text-[9px] font-normal tabular-nums">
+                        {total}
+                      </span>
+                    </button>
+                    {!isCollapsed && (
+                      <ul className="space-y-0.5">
+                        {sortedChildren.map(([childName, childNode]) =>
+                          renderGroupNode(childName, childNode, fullPath, depth + 1),
+                        )}
+                        {node.projects.length > 0 && (
+                          <ul style={{ paddingLeft: `${depth * 12}px` }}>
+                            {node.projects.map(renderProject)}
+                          </ul>
+                        )}
+                      </ul>
+                    )}
+                  </li>
+                );
+              };
+
+              const sortedRootChildren = [...root.children.entries()].sort((a, b) =>
+                a[0].localeCompare(b[0]),
+              );
+
               return (
                 <>
-                  {groupEntries.map(([groupName, projects]) => {
-                    const isCollapsed = collapsedGroups.has(groupName);
-                    return (
-                      <li key={`group:${groupName}`} className="space-y-0.5">
-                        <button
-                          type="button"
-                          className="flex h-6 w-full items-center gap-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-                          onClick={() => toggleGroup(groupName)}
-                        >
-                          <ChevronRightIcon
-                            className={`size-3 shrink-0 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
-                          />
-                          {groupName}
-                          <span className="ml-auto text-[9px] font-normal tabular-nums">
-                            {projects.length}
-                          </span>
-                        </button>
-                        {!isCollapsed && (
-                          <ul className="space-y-0.5 pl-2">{projects.map(renderProject)}</ul>
-                        )}
-                      </li>
-                    );
-                  })}
-                  {ungrouped.map(renderProject)}
+                  {sortedRootChildren.map(([name, node]) => renderGroupNode(name, node, "", 0))}
+                  {root.projects.map(renderProject)}
                 </>
               );
             })()}
