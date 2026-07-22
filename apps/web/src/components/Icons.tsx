@@ -243,6 +243,18 @@ export const KiroIcon: Icon = (props) => (
   </svg>
 );
 
+export const KimiIcon: Icon = ({ className, ...props }) => (
+  <svg
+    {...props}
+    viewBox="0 0 24 24"
+    fill="none"
+    className={cn("fill-[#1A1A2E] dark:fill-[#E0E0E0]", className)}
+  >
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm0 18c-4.42 0-8-3.58-8-8 0-4.42 3.58-8 8-8 1.85 0 3.55.63 4.9 1.69A7.96 7.96 0 0 1 20 12c0 4.42-3.58 8-8 8Z" />
+    <path d="M14.5 8.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5S16 10.83 16 10s-.67-1.5-1.5-1.5ZM10 13c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2Z" />
+  </svg>
+);
+
 export const VisualStudioCode: Icon = (props) => {
   const id = useId();
   const maskId = `${id}-vscode-a`;
