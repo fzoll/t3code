@@ -3098,6 +3098,19 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     projectsLength,
   } = props;
 
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = useCallback((groupName: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupName)) {
+        next.delete(groupName);
+      } else {
+        next.add(groupName);
+      }
+      return next;
+    });
+  }, []);
+
   const handleProjectSortOrderChange = useCallback(
     (sortOrder: SidebarProjectSortOrder) => {
       updateSettings({ sidebarProjectSortOrder: sortOrder });
@@ -3292,14 +3305,29 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
 
               return (
                 <>
-                  {groupEntries.map(([groupName, projects]) => (
-                    <li key={`group:${groupName}`} className="space-y-0.5">
-                      <div className="flex h-6 items-center px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                        {groupName}
-                      </div>
-                      <ul className="space-y-0.5 pl-2">{projects.map(renderProject)}</ul>
-                    </li>
-                  ))}
+                  {groupEntries.map(([groupName, projects]) => {
+                    const isCollapsed = collapsedGroups.has(groupName);
+                    return (
+                      <li key={`group:${groupName}`} className="space-y-0.5">
+                        <button
+                          type="button"
+                          className="flex h-6 w-full items-center gap-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                          onClick={() => toggleGroup(groupName)}
+                        >
+                          <ChevronRightIcon
+                            className={`size-3 shrink-0 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+                          />
+                          {groupName}
+                          <span className="ml-auto text-[9px] font-normal tabular-nums">
+                            {projects.length}
+                          </span>
+                        </button>
+                        {!isCollapsed && (
+                          <ul className="space-y-0.5 pl-2">{projects.map(renderProject)}</ul>
+                        )}
+                      </li>
+                    );
+                  })}
                   {ungrouped.map(renderProject)}
                 </>
               );
