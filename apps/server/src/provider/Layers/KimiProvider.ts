@@ -41,7 +41,7 @@ const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],
 });
 
-const VERSION_PROBE_TIMEOUT_MS = 4_000;
+const VERSION_PROBE_TIMEOUT_MS = 10_000;
 const KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS = 15_000;
 
 const KIMI_BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
