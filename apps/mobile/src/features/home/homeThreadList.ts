@@ -326,7 +326,7 @@ export function buildHomeThreadGroups(input: {
           pendingTask.title.toLocaleLowerCase().includes(query),
         );
 
-    if (matchingThreads.length === 0 && matchingPendingTasks.length === 0) {
+    if (query.length > 0 && matchingThreads.length === 0 && matchingPendingTasks.length === 0) {
       continue;
     }
 
