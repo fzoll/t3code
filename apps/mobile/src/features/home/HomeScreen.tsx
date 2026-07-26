@@ -19,7 +19,7 @@ import type {
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Platform, Pressable, View } from "react-native";
+import { ActivityIndicator, FlatList, Platform, Pressable, Text, View } from "react-native";
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "../../lib/useThemeColor";
@@ -389,15 +389,29 @@ export function HomeScreen(props: HomeScreenProps) {
     ],
   );
 
+  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleSection = useCallback((path: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
   const hasSearchQuery = props.searchQuery.trim().length > 0;
   const listLayout = useMemo(
     () =>
       buildHomeListLayout({
         groups: projectGroups,
         displayStates: effectiveGroupDisplayStates,
+        collapsedSections,
         showAllThreads: hasSearchQuery,
       }),
-    [projectGroups, effectiveGroupDisplayStates, hasSearchQuery],
+    [projectGroups, effectiveGroupDisplayStates, collapsedSections, hasSearchQuery],
   );
 
   const projectCwdByKey = useMemo(() => {
@@ -942,6 +956,17 @@ export function HomeScreen(props: HomeScreenProps) {
               onGroupAction={updateGroupDisplay}
             />
           );
+        case "section-header":
+          return (
+            <SectionHeaderRow
+              label={item.label}
+              depth={item.depth}
+              path={item.path}
+              collapsed={item.collapsed}
+              projectCount={item.projectCount}
+              onToggle={toggleSection}
+            />
+          );
       }
     },
     [
@@ -957,6 +982,7 @@ export function HomeScreen(props: HomeScreenProps) {
       props.searchQuery,
       props.savedConnectionsById,
       threadSearchMatchByKey,
+      toggleSection,
       updateGroupDisplay,
     ],
   );
@@ -1180,5 +1206,50 @@ export function HomeScreen(props: HomeScreenProps) {
       </SwipeableScrollGateProvider>
       {connectionStatus}
     </View>
+  );
+}
+
+function SectionHeaderRow(props: {
+  readonly label: string;
+  readonly depth: number;
+  readonly path: string;
+  readonly collapsed: boolean;
+  readonly projectCount: number;
+  readonly onToggle: (path: string) => void;
+}) {
+  const mutedColor = useThemeColor("--color-text-muted");
+  return (
+    <Pressable
+      onPress={() => props.onToggle(props.path)}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        paddingLeft: 16 + props.depth * 12,
+        paddingRight: 16,
+        height: 32,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 11,
+          fontWeight: "600",
+          letterSpacing: 0.8,
+          textTransform: "uppercase",
+          color: mutedColor,
+        }}
+      >
+        {props.collapsed ? "▸" : "▾"} {props.label}
+      </Text>
+      <Text
+        style={{
+          fontSize: 10,
+          color: mutedColor,
+          marginLeft: "auto",
+          fontVariant: ["tabular-nums"],
+        }}
+      >
+        {props.projectCount}
+      </Text>
+    </Pressable>
   );
 }

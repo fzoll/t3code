@@ -51,11 +51,22 @@ export interface HomeShowMoreListItem {
   readonly canShowLess: boolean;
 }
 
+export interface HomeSectionHeaderListItem {
+  readonly type: "section-header";
+  readonly key: string;
+  readonly label: string;
+  readonly depth: number;
+  readonly path: string;
+  readonly collapsed: boolean;
+  readonly projectCount: number;
+}
+
 export type HomeListItem =
   | HomeHeaderListItem
   | HomePendingTaskListItem
   | HomeThreadListItem
-  | HomeShowMoreListItem;
+  | HomeShowMoreListItem
+  | HomeSectionHeaderListItem;
 
 export interface HomeListLayout {
   readonly items: ReadonlyArray<HomeListItem>;
@@ -113,12 +124,174 @@ export function homeListItemsAreEqual(previous: HomeListItem, item: HomeListItem
         previous.hiddenCount === item.hiddenCount &&
         previous.canShowLess === item.canShowLess
       );
+    case "section-header":
+      return (
+        previous.type === "section-header" &&
+        previous.path === item.path &&
+        previous.collapsed === item.collapsed &&
+        previous.projectCount === item.projectCount
+      );
+  }
+}
+
+interface GroupTreeNode {
+  readonly children: Map<string, GroupTreeNode>;
+  readonly groups: HomeThreadGroup[];
+}
+
+function countGroupTreeProjects(node: GroupTreeNode): number {
+  let count = node.groups.length;
+  for (const child of node.children.values()) {
+    count += countGroupTreeProjects(child);
+  }
+  return count;
+}
+
+function buildGroupTree(groups: ReadonlyArray<HomeThreadGroup>): GroupTreeNode {
+  const root: GroupTreeNode = { children: new Map(), groups: [] };
+  for (const group of groups) {
+    const groupPath = group.representative.group ?? "";
+    if (!groupPath) {
+      root.groups.push(group);
+      continue;
+    }
+    const segments = groupPath.split("/").filter(Boolean);
+    let node = root;
+    for (const segment of segments) {
+      if (!node.children.has(segment)) {
+        (node.children as Map<string, GroupTreeNode>).set(segment, {
+          children: new Map(),
+          groups: [],
+        });
+      }
+      node = node.children.get(segment)!;
+    }
+    node.groups.push(group);
+  }
+  return root;
+}
+
+function appendGroupItems(
+  items: HomeListItem[],
+  stickyHeaderIndices: number[],
+  group: HomeThreadGroup,
+  groupIndex: number,
+  displayStates: ReadonlyMap<string, HomeGroupDisplayState>,
+  showAllThreads: boolean,
+): void {
+  const display = displayStates.get(group.key) ?? DEFAULT_GROUP_DISPLAY_STATE;
+  const collapsed = display.collapsed && !showAllThreads;
+
+  stickyHeaderIndices.push(items.length);
+  items.push({
+    type: "header",
+    key: `header:${group.key}`,
+    group,
+    collapsed,
+    isFirst: groupIndex === 0 && items.length === 0,
+  });
+
+  if (collapsed) return;
+
+  const totalCount = group.threads.length;
+  const baselineCount = Math.min(
+    group.recentThreads.length,
+    HOME_INITIAL_VISIBLE_THREADS,
+    totalCount,
+  );
+  const visibleCount = showAllThreads
+    ? totalCount
+    : Math.min(
+        display.visibleCount > HOME_INITIAL_VISIBLE_THREADS ? display.visibleCount : baselineCount,
+        totalCount,
+      );
+  const visibleThreads = group.threads.slice(0, visibleCount);
+  const hiddenCount = totalCount - visibleCount;
+  const hasShowMoreRow = !showAllThreads && totalCount > baselineCount;
+
+  for (const [pendingIndex, pendingTask] of group.pendingTasks.entries()) {
+    items.push({
+      type: "pending-task",
+      key: `pending-task:${pendingTask.message.messageId}`,
+      pendingTask,
+      isLast:
+        pendingIndex === group.pendingTasks.length - 1 &&
+        visibleThreads.length === 0 &&
+        !hasShowMoreRow,
+    });
+  }
+
+  for (const [threadIndex, thread] of visibleThreads.entries()) {
+    items.push({
+      type: "thread",
+      key: `thread:${thread.environmentId}:${thread.id}`,
+      thread,
+      isLast: threadIndex === visibleThreads.length - 1 && !hasShowMoreRow,
+    });
+  }
+
+  if (hasShowMoreRow) {
+    items.push({
+      type: "show-more",
+      key: `show-more:${group.key}`,
+      groupKey: group.key,
+      hiddenCount,
+      canShowLess: visibleCount > baselineCount,
+    });
+  }
+}
+
+function appendTreeNode(
+  items: HomeListItem[],
+  stickyHeaderIndices: number[],
+  name: string,
+  node: GroupTreeNode,
+  parentPath: string,
+  depth: number,
+  displayStates: ReadonlyMap<string, HomeGroupDisplayState>,
+  sectionCollapsed: ReadonlySet<string>,
+  showAllThreads: boolean,
+): void {
+  const fullPath = parentPath ? `${parentPath}/${name}` : name;
+  const collapsed = sectionCollapsed.has(fullPath);
+  const projectCount = countGroupTreeProjects(node);
+
+  stickyHeaderIndices.push(items.length);
+  items.push({
+    type: "section-header",
+    key: `section:${fullPath}`,
+    label: name,
+    depth,
+    path: fullPath,
+    collapsed,
+    projectCount,
+  });
+
+  if (collapsed) return;
+
+  const sortedChildren = [...node.children.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [childName, childNode] of sortedChildren) {
+    appendTreeNode(
+      items,
+      stickyHeaderIndices,
+      childName,
+      childNode,
+      fullPath,
+      depth + 1,
+      displayStates,
+      sectionCollapsed,
+      showAllThreads,
+    );
+  }
+  for (const [groupIndex, group] of node.groups.entries()) {
+    appendGroupItems(items, stickyHeaderIndices, group, groupIndex, displayStates, showAllThreads);
   }
 }
 
 export function buildHomeListLayout(input: {
   readonly groups: ReadonlyArray<HomeThreadGroup>;
   readonly displayStates: ReadonlyMap<string, HomeGroupDisplayState>;
+  readonly collapsedSections?: ReadonlySet<string>;
   /**
    * When searching, pagination is suspended so every match stays visible.
    */
@@ -126,81 +299,34 @@ export function buildHomeListLayout(input: {
 }): HomeListLayout {
   const items: HomeListItem[] = [];
   const stickyHeaderIndices: number[] = [];
+  const sectionCollapsed = input.collapsedSections ?? new Set<string>();
+  const showAllThreads = input.showAllThreads === true;
 
-  for (const [groupIndex, group] of input.groups.entries()) {
-    const display = input.displayStates.get(group.key) ?? DEFAULT_GROUP_DISPLAY_STATE;
-    const collapsed = display.collapsed && input.showAllThreads !== true;
+  const tree = buildGroupTree(input.groups);
 
-    stickyHeaderIndices.push(items.length);
-    items.push({
-      type: "header",
-      key: `header:${group.key}`,
-      group,
-      collapsed,
-      isFirst: groupIndex === 0,
-    });
-
-    if (collapsed) {
-      continue;
-    }
-
-    const totalCount = group.threads.length;
-    // Default to the group's recent-activity window (last few days, or a small
-    // fallback for stale projects), capped at the initial page size. Until the
-    // user taps "Show more", older threads stay hidden to save vertical space;
-    // "Show less" resets visibleCount to the initial constant, which lands back
-    // here at the recency baseline.
-    const baselineCount = Math.min(
-      group.recentThreads.length,
-      HOME_INITIAL_VISIBLE_THREADS,
-      totalCount,
+  const sortedRootChildren = [...tree.children.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [name, node] of sortedRootChildren) {
+    appendTreeNode(
+      items,
+      stickyHeaderIndices,
+      name,
+      node,
+      "",
+      0,
+      input.displayStates,
+      sectionCollapsed,
+      showAllThreads,
     );
-    const visibleCount = input.showAllThreads
-      ? totalCount
-      : Math.min(
-          display.visibleCount > HOME_INITIAL_VISIBLE_THREADS
-            ? display.visibleCount
-            : baselineCount,
-          totalCount,
-        );
-    const visibleThreads = group.threads.slice(0, visibleCount);
-    const hiddenCount = totalCount - visibleCount;
-    const hasShowMoreRow = !input.showAllThreads && totalCount > baselineCount;
-
-    // Pending (unsent) tasks lead the group and are never paginated away.
-    for (const [pendingIndex, pendingTask] of group.pendingTasks.entries()) {
-      items.push({
-        type: "pending-task",
-        key: `pending-task:${pendingTask.message.messageId}`,
-        pendingTask,
-        isLast:
-          pendingIndex === group.pendingTasks.length - 1 &&
-          visibleThreads.length === 0 &&
-          !hasShowMoreRow,
-      });
-    }
-
-    for (const [threadIndex, thread] of visibleThreads.entries()) {
-      items.push({
-        type: "thread",
-        key: `thread:${thread.environmentId}:${thread.id}`,
-        thread,
-        isLast: threadIndex === visibleThreads.length - 1 && !hasShowMoreRow,
-      });
-    }
-
-    if (hasShowMoreRow) {
-      items.push({
-        type: "show-more",
-        key: `show-more:${group.key}`,
-        groupKey: group.key,
-        hiddenCount,
-        // Compare against the group's own baseline, not the global page size:
-        // stale projects start below HOME_INITIAL_VISIBLE_THREADS, and "Show
-        // less" must be offered as soon as anything beyond the baseline shows.
-        canShowLess: visibleCount > baselineCount,
-      });
-    }
+  }
+  for (const [groupIndex, group] of tree.groups.entries()) {
+    appendGroupItems(
+      items,
+      stickyHeaderIndices,
+      group,
+      groupIndex,
+      input.displayStates,
+      showAllThreads,
+    );
   }
 
   return { items, stickyHeaderIndices };

@@ -379,15 +379,28 @@ function ThreadNavigationSidebarPane(
       return next;
     });
   }, []);
+  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleSection = useCallback((path: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
   const hasSearchQuery = props.searchQuery.trim().length > 0;
   const listLayout = useMemo(
     () =>
       buildHomeListLayout({
         groups,
         displayStates: groupDisplayStates,
+        collapsedSections,
         showAllThreads: hasSearchQuery,
       }),
-    [groups, groupDisplayStates, hasSearchQuery],
+    [groups, groupDisplayStates, collapsedSections, hasSearchQuery],
   );
   const projectCwdByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -1050,6 +1063,17 @@ function ThreadNavigationSidebarPane(
               onGroupAction={updateGroupDisplay}
             />
           );
+        case "section-header":
+          return (
+            <SidebarSectionHeaderRow
+              label={item.label}
+              depth={item.depth}
+              path={item.path}
+              collapsed={item.collapsed}
+              projectCount={item.projectCount}
+              onToggle={toggleSection}
+            />
+          );
       }
     },
     [
@@ -1082,6 +1106,7 @@ function ThreadNavigationSidebarPane(
       nowMinute,
       toggleSettledShelf,
       toggleSnoozedShelf,
+      toggleSection,
       unpinThread,
       unsettleThread,
       unsnoozeThread,
@@ -1364,3 +1389,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
 });
+
+function SidebarSectionHeaderRow(props: {
+  readonly label: string;
+  readonly depth: number;
+  readonly path: string;
+  readonly collapsed: boolean;
+  readonly projectCount: number;
+  readonly onToggle: (path: string) => void;
+}) {
+  return (
+    <Pressable
+      onPress={() => props.onToggle(props.path)}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        paddingLeft: 12 + props.depth * 12,
+        paddingRight: 12,
+        height: 28,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 10,
+          fontWeight: "600",
+          letterSpacing: 0.8,
+          textTransform: "uppercase",
+          color: "#888",
+        }}
+      >
+        {props.collapsed ? "▸" : "▾"} {props.label}
+      </Text>
+      <Text
+        style={{
+          fontSize: 9,
+          color: "#888",
+          marginLeft: "auto",
+          fontVariant: ["tabular-nums"],
+        }}
+      >
+        {props.projectCount}
+      </Text>
+    </Pressable>
+  );
+}
