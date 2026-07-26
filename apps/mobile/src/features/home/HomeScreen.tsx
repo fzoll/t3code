@@ -19,12 +19,12 @@ import type {
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Platform, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Platform, Pressable, View } from "react-native";
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "../../lib/useThemeColor";
 
-import { AppText as Text } from "../../components/AppText";
+import { AppText, AppText as Text } from "../../components/AppText";
 import { EmptyState } from "../../components/EmptyState";
 import type { WorkspaceEnvironment, WorkspaceState } from "../../state/workspaceModel";
 import type { SavedRemoteConnection } from "../../lib/connection";
@@ -1229,7 +1229,7 @@ function SectionHeaderRow(props: {
         height: 32,
       }}
     >
-      <Text
+      <AppText
         style={{
           fontSize: 11,
           fontWeight: "600",
@@ -1239,8 +1239,8 @@ function SectionHeaderRow(props: {
         }}
       >
         {props.collapsed ? "▸" : "▾"} {props.label}
-      </Text>
-      <Text
+      </AppText>
+      <AppText
         style={{
           fontSize: 10,
           color: mutedColor,
@@ -1249,7 +1249,7 @@ function SectionHeaderRow(props: {
         }}
       >
         {props.projectCount}
-      </Text>
+      </AppText>
     </Pressable>
   );
 }
