@@ -1217,7 +1217,6 @@ function SectionHeaderRow(props: {
   readonly projectCount: number;
   readonly onToggle: (path: string) => void;
 }) {
-  const mutedColor = useThemeColor("--color-text-muted");
   return (
     <Pressable
       onPress={() => props.onToggle(props.path)}
@@ -1230,20 +1229,20 @@ function SectionHeaderRow(props: {
       }}
     >
       <AppText
+        className="text-foreground-muted"
         style={{
           fontSize: 11,
           fontWeight: "600",
           letterSpacing: 0.8,
           textTransform: "uppercase",
-          color: mutedColor,
         }}
       >
         {props.collapsed ? "▸" : "▾"} {props.label}
       </AppText>
       <AppText
+        className="text-foreground-tertiary"
         style={{
           fontSize: 10,
-          color: mutedColor,
           marginLeft: "auto",
           fontVariant: ["tabular-nums"],
         }}
