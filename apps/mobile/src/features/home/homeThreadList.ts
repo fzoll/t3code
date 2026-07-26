@@ -297,7 +297,7 @@ export function buildHomeThreadGroups(input: {
 
   for (const group of groups.values()) {
     const representative = group.projects[0];
-    if (!representative || (group.threads.length === 0 && group.pendingTasks.length === 0)) {
+    if (!representative) {
       continue;
     }
 
