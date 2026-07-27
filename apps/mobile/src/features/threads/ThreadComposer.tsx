@@ -820,17 +820,22 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             </View>
           ) : null}
           {!isExpanded ? (
-            <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(100)}>
+            <Animated.View
+              entering={FadeIn.duration(180)}
+              exiting={FadeOut.duration(100)}
+              style={{ flexDirection: "row", gap: 6 }}
+            >
               {showStopAction ? (
                 <ControlPill icon="stop.fill" variant="danger" onPress={props.onStopThread} />
-              ) : (
+              ) : null}
+              {!showStopAction || canSend ? (
                 <ControlPill
                   icon="arrow.up"
                   variant="primary"
                   disabled={!canSend}
                   onPress={handleSend}
                 />
-              )}
+              ) : null}
             </Animated.View>
           ) : null}
         </ComposerSurface>
