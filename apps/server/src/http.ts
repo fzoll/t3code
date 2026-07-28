@@ -26,8 +26,11 @@ import {
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { OtlpTracer } from "effect/unstable/observability";
 
+import * as NodeOS from "node:os";
 import * as ServerConfig from "./config.ts";
 import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
+import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
+import { ProviderService } from "./provider/Services/ProviderService.ts";
 import * as BrowserTraceCollector from "./observability/BrowserTraceCollector.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import { traceRelayRequest } from "./cloud/traceRelayRequest.ts";
@@ -112,11 +115,39 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
   "metadata",
   Effect.fnUntraced(function* (handlers) {
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
+    const providerService = yield* ProviderService;
     return handlers.handle(
       "descriptor",
       Effect.fn("environment.metadata.descriptor")(function* (args) {
         yield* annotateEnvironmentRequest(args.endpoint.name);
-        return yield* serverEnvironment.getDescriptor;
+        const descriptor = yield* serverEnvironment.getDescriptor;
+        const sessionPids = yield* providerService
+          .getSessionPids()
+          .pipe(Effect.orElseSucceed(() => []));
+        if (sessionPids.length === 0) {
+          return descriptor;
+        }
+        const processRows = yield* ProcessDiagnostics.readProcessRows.pipe(
+          Effect.orElseSucceed(() => []),
+        );
+        const rssByPid = new Map<number, number>();
+        for (const row of processRows) {
+          rssByPid.set(row.pid, row.rssBytes);
+        }
+        const sessions = sessionPids.map((s) => ({
+          threadId: s.threadId,
+          pid: s.pid,
+          rssBytes: rssByPid.get(s.pid) ?? 0,
+        }));
+        return {
+          ...descriptor,
+          resources: {
+            ...descriptor.resources,
+            freeMemoryMb: Math.round(NodeOS.freemem() / (1024 * 1024)),
+            totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
+            sessions,
+          },
+        };
       }, traceRelayRequest),
     );
   }),

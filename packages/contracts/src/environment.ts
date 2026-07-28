@@ -63,9 +63,17 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
 });
 export type ExecutionEnvironmentCapabilities = typeof ExecutionEnvironmentCapabilities.Type;
 
+export const ExecutionEnvironmentSessionResource = Schema.Struct({
+  threadId: ThreadId,
+  pid: Schema.Number,
+  rssBytes: Schema.Number,
+});
+export type ExecutionEnvironmentSessionResource = typeof ExecutionEnvironmentSessionResource.Type;
+
 export const ExecutionEnvironmentResources = Schema.Struct({
   freeMemoryMb: Schema.Number,
   totalMemoryMb: Schema.Number,
+  sessions: Schema.optional(Schema.Array(ExecutionEnvironmentSessionResource)),
 });
 export type ExecutionEnvironmentResources = typeof ExecutionEnvironmentResources.Type;
 

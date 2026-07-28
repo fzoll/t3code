@@ -151,6 +151,7 @@ export interface CodexSessionRuntimeShape {
   ) => Effect.Effect<void, CodexSessionRuntimeError>;
   readonly events: Stream.Stream<ProviderEvent, never>;
   readonly close: Effect.Effect<void>;
+  readonly pid: number;
 }
 
 export type CodexSessionRuntimeError =
@@ -1419,5 +1420,6 @@ export const makeCodexSessionRuntime = (
         }),
       events: Stream.fromQueue(events),
       close,
+      pid: Number(child.pid),
     } satisfies CodexSessionRuntimeShape;
   });

@@ -243,6 +243,7 @@ export class AcpSessionRuntime extends Context.Service<
       method: string,
       payload: unknown,
     ) => Effect.Effect<void, EffectAcpErrors.AcpError>;
+    readonly pid: number;
   }
 >()("t3/provider/acp/AcpSessionRuntime") {}
 
@@ -806,6 +807,7 @@ export const make = (
       request: (method, payload) =>
         runLoggedRequest(method, payload, acp.raw.request(method, payload)),
       notify: acp.raw.notify,
+      pid: Number(child.pid),
     } satisfies AcpSessionRuntime["Service"];
   });
 

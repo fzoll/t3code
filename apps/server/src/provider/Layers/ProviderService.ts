@@ -1085,6 +1085,21 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     getCapabilities,
     getInstanceInfo,
     rollbackConversation,
+    getSessionPids: () =>
+      Effect.gen(function* () {
+        const currentAdapters = yield* getAdapterEntries;
+        const results: Array<{ threadId: ThreadId; pid: number; provider: string }> = [];
+        for (const [_instanceId, adapter] of currentAdapters) {
+          const sessions = yield* adapter.listSessions();
+          for (const session of sessions) {
+            const pid = yield* adapter.getSessionPid(session.threadId);
+            if (pid !== null) {
+              results.push({ threadId: session.threadId, pid, provider: adapter.provider });
+            }
+          }
+        }
+        return results;
+      }),
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each
     // independently receive all runtime events.

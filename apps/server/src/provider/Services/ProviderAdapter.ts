@@ -120,6 +120,11 @@ export interface ProviderAdapterShape<TError> {
   readonly stopAll: () => Effect.Effect<void, TError>;
 
   /**
+   * OS-level process ID of the session's child process, if available.
+   */
+  readonly getSessionPid: (threadId: ThreadId) => Effect.Effect<number | null>;
+
+  /**
    * Canonical runtime event stream emitted by this adapter.
    */
   readonly streamEvents: Stream.Stream<ProviderRuntimeEvent>;

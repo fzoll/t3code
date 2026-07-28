@@ -202,6 +202,7 @@ interface ClaudeSessionContext {
   lastKnownTotalProcessedTokens: number | undefined;
   lastAssistantUuid: string | undefined;
   lastThreadStartedId: string | undefined;
+  pid: number | null;
   stopped: boolean;
 }
 
@@ -3592,6 +3593,20 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         "claude.query.path_to_executable": claudeBinaryPath,
       });
 
+      let capturedPid: number | null = null;
+      if (!queryOptions.spawnClaudeCodeProcess) {
+        queryOptions.spawnClaudeCodeProcess = (spawnOptions) => {
+          const cp = require("node:child_process").spawn(spawnOptions.command, spawnOptions.args, {
+            cwd: spawnOptions.cwd,
+            env: spawnOptions.env,
+            signal: spawnOptions.signal,
+            stdio: ["pipe", "pipe", "pipe"],
+          });
+          capturedPid = cp.pid ?? null;
+          return cp;
+        };
+      }
+
       const queryRuntime = yield* Effect.try({
         try: () =>
           createQuery({
@@ -3646,6 +3661,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         lastKnownTotalProcessedTokens: undefined,
         lastAssistantUuid: resumeState?.resumeSessionAt,
         lastThreadStartedId: undefined,
+        pid: capturedPid,
         stopped: false,
       };
       yield* Ref.set(contextRef, context);
@@ -3950,6 +3966,11 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     listSessions,
     hasSession,
     stopAll,
+    getSessionPid: (threadId) =>
+      Effect.sync(() => {
+        const ctx = sessions.get(threadId);
+        return ctx && !ctx.stopped ? ctx.pid : null;
+      }),
     get streamEvents() {
       return Stream.fromQueue(runtimeEventQueue);
     },
