@@ -28,6 +28,7 @@ import { OtlpTracer } from "effect/unstable/observability";
 
 import * as NodeOS from "node:os";
 import * as ServerConfig from "./config.ts";
+import { availableMemoryMb } from "./diagnostics/availableMemory.ts";
 import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import { ProviderService } from "./provider/Services/ProviderService.ts";
@@ -143,7 +144,7 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
           ...descriptor,
           resources: {
             ...descriptor.resources,
-            freeMemoryMb: Math.round(NodeOS.freemem() / (1024 * 1024)),
+            freeMemoryMb: availableMemoryMb(),
             totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
             sessions,
           },

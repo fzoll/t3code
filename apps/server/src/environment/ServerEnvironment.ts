@@ -1,5 +1,6 @@
 import * as NodeOS from "node:os";
 import { EnvironmentId, type ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
+import { availableMemoryMb } from "../diagnostics/availableMemory.ts";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -159,7 +160,7 @@ export const make = Effect.gen(function* () {
       (): ExecutionEnvironmentDescriptor => ({
         ...baseDescriptor,
         resources: {
-          freeMemoryMb: Math.round(NodeOS.freemem() / (1024 * 1024)),
+          freeMemoryMb: availableMemoryMb(),
           totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
         },
       }),
