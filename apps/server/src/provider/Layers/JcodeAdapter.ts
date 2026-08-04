@@ -33,7 +33,6 @@ import type * as EffectAcpSchema from "effect-acp/schema";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
-import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -538,7 +537,6 @@ export function makeJcodeAdapter(jcodeSettings: JcodeSettings, options?: JcodeAd
             threadId: input.threadId,
           });
 
-          const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
           const acp = yield* makeJcodeAcpRuntime({
             jcodeSettings,
             ...(options?.environment ? { environment: options.environment } : {}),
@@ -546,23 +544,6 @@ export function makeJcodeAdapter(jcodeSettings: JcodeSettings, options?: JcodeAd
             cwd,
             ...(resumeSessionId ? { resumeSessionId } : {}),
             clientInfo: { name: "t3-code", version: "0.0.0" },
-            ...(mcpSession
-              ? {
-                  mcpServers: [
-                    {
-                      type: "http" as const,
-                      name: "t3-code",
-                      url: mcpSession.endpoint,
-                      headers: [
-                        {
-                          name: "Authorization",
-                          value: mcpSession.authorizationHeader,
-                        },
-                      ],
-                    },
-                  ],
-                }
-              : {}),
             ...acpNativeLoggers,
           }).pipe(
             Effect.provideService(Crypto.Crypto, crypto),
