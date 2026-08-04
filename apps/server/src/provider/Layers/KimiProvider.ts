@@ -15,6 +15,9 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 
+import type * as EffectAcpSchema from "effect-acp/schema";
+import * as Exit from "effect/Exit";
+
 import {
   buildServerProvider,
   isCommandMissingCause,
@@ -27,6 +30,7 @@ import {
   enrichProviderSnapshotWithVersionAdvisory,
   type ProviderMaintenanceCapabilities,
 } from "../providerMaintenance.ts";
+import { makeKimiAcpRuntime, resolveKimiAcpBaseModelId } from "../acp/KimiAcpSupport.ts";
 
 const KIMI_PRESENTATION = {
   displayName: "Kimi",
@@ -39,11 +43,24 @@ const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
 });
 
 const VERSION_PROBE_TIMEOUT_MS = 10_000;
+const KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS = 15_000;
 
 const KIMI_BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
     slug: "kimi-k2",
     name: "Kimi K2",
+    isCustom: false,
+    capabilities: EMPTY_CAPABILITIES,
+  },
+  {
+    slug: "kimi-k2.7",
+    name: "Kimi K2.7",
+    isCustom: false,
+    capabilities: EMPTY_CAPABILITIES,
+  },
+  {
+    slug: "kimi-k3",
+    name: "Kimi K3",
     isCustom: false,
     capabilities: EMPTY_CAPABILITIES,
   },
@@ -94,6 +111,47 @@ function kimiModelsFromSettings(
 ): ReadonlyArray<ServerProviderModel> {
   return providerModelsFromSettings(builtInModels, customModels ?? [], EMPTY_CAPABILITIES);
 }
+
+function buildKimiDiscoveredModelsFromSessionModelState(
+  modelState: EffectAcpSchema.SessionModelState | null | undefined,
+): ReadonlyArray<ServerProviderModel> {
+  if (!modelState || modelState.availableModels.length === 0) {
+    return [];
+  }
+  const seen = new Set<string>();
+  return modelState.availableModels
+    .map((model): ServerProviderModel | undefined => {
+      const slug = resolveKimiAcpBaseModelId(model.modelId);
+      if (!slug || seen.has(slug)) {
+        return undefined;
+      }
+      seen.add(slug);
+      return {
+        slug,
+        name: model.name.trim() || slug,
+        isCustom: false,
+        capabilities: EMPTY_CAPABILITIES,
+      };
+    })
+    .filter((model): model is ServerProviderModel => model !== undefined);
+}
+
+const discoverKimiModelsViaAcp = (
+  kimiSettings: KimiSettings,
+  environment: NodeJS.ProcessEnv = process.env,
+) =>
+  Effect.gen(function* () {
+    const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const acp = yield* makeKimiAcpRuntime({
+      kimiSettings,
+      environment,
+      childProcessSpawner,
+      cwd: process.cwd(),
+      clientInfo: { name: "t3-code-provider-probe", version: "0.0.0" },
+    });
+    const started = yield* acp.start();
+    return buildKimiDiscoveredModelsFromSessionModelState(started.sessionSetupResult.models);
+  }).pipe(Effect.scoped);
 
 const runKimiVersionCommand = (
   kimiSettings: KimiSettings,
@@ -206,10 +264,51 @@ export const checkKimiProviderStatus = Effect.fn("checkKimiProviderStatus")(func
     });
   }
 
-  // Kimi ACP session/new blocks indefinitely on some platforms; skip
-  // runtime model discovery and use built-in models until Kimi ACP
-  // session startup is reliable.
-  const models = fallbackModels;
+  const discoveryExit = yield* discoverKimiModelsViaAcp(kimiSettings, environment).pipe(
+    Effect.timeoutOption(KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS),
+    Effect.exit,
+  );
+  if (Exit.isFailure(discoveryExit)) {
+    yield* Effect.logWarning("Kimi ACP model discovery failed", {
+      errorTag: causeErrorTag(discoveryExit.cause),
+    });
+    return buildServerProvider({
+      presentation: KIMI_PRESENTATION,
+      enabled: kimiSettings.enabled,
+      checkedAt,
+      models: fallbackModels,
+      probe: {
+        installed: true,
+        version,
+        status: "error",
+        auth: { status: "unknown" },
+        message: "Kimi CLI is installed but ACP startup failed. Check server logs for details.",
+      },
+    });
+  }
+  if (Option.isNone(discoveryExit.value)) {
+    yield* Effect.logWarning(
+      `Kimi ACP model discovery timed out after ${KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS}ms.`,
+    );
+    return buildServerProvider({
+      presentation: KIMI_PRESENTATION,
+      enabled: kimiSettings.enabled,
+      checkedAt,
+      models: fallbackModels,
+      probe: {
+        installed: true,
+        version,
+        status: "error",
+        auth: { status: "unknown" },
+        message: `Kimi CLI is installed but ACP startup timed out after ${KIMI_ACP_MODEL_DISCOVERY_TIMEOUT_MS}ms.`,
+      },
+    });
+  }
+  const discoveredModels = discoveryExit.value.value;
+  const models =
+    discoveredModels.length > 0
+      ? kimiModelsFromSettings(kimiSettings.customModels, discoveredModels)
+      : fallbackModels;
 
   return buildServerProvider({
     presentation: KIMI_PRESENTATION,
