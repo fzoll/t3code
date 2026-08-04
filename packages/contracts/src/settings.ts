@@ -431,13 +431,22 @@ export const JcodeSettings = makeProviderSettingsSchema(
         providerSettingsForm: { placeholder: "jcode", clearWhenEmpty: "omit" },
       }),
     ),
+    defaultProvider: Schema.String.pipe(
+      Schema.withDecodingDefault(Effect.succeed("auto")),
+      Schema.annotateKey({
+        title: "Default provider",
+        description:
+          "jcode LLM provider to use (e.g. openai-api, claude, gemini, openrouter). 'auto' auto-detects.",
+        providerSettingsForm: { placeholder: "auto", clearWhenEmpty: "omit" },
+      }),
+    ),
     customModels: Schema.Array(Schema.String).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
   },
   {
-    order: ["binaryPath"],
+    order: ["binaryPath", "defaultProvider"],
   },
 );
 export type JcodeSettings = typeof JcodeSettings.Type;

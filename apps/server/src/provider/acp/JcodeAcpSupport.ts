@@ -13,7 +13,7 @@ import * as AcpSessionRuntime from "./AcpSessionRuntime.ts";
 const JCODE_AUTH_METHOD = "cached_token";
 const JCODE_DRIVER_KIND = ProviderDriverKind.make("jcode");
 
-type JcodeAcpRuntimeJcodeSettings = Pick<JcodeSettings, "binaryPath">;
+type JcodeAcpRuntimeJcodeSettings = Pick<JcodeSettings, "binaryPath" | "defaultProvider">;
 
 interface JcodeAcpRuntimeInput extends Omit<
   AcpSessionRuntime.AcpSessionRuntimeOptions,
@@ -29,9 +29,10 @@ export function buildJcodeAcpSpawnInput(
   cwd: string,
   environment?: NodeJS.ProcessEnv,
 ): AcpSessionRuntime.AcpSpawnInput {
+  const provider = jcodeSettings?.defaultProvider || "auto";
   return {
     command: jcodeSettings?.binaryPath || "jcode",
-    args: ["acp"],
+    args: ["acp", "--no-update", ...(provider !== "auto" ? ["--provider", provider] : [])],
     cwd,
     ...(environment ? { env: environment } : {}),
   };
