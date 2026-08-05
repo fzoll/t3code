@@ -83,12 +83,7 @@ export function applyJcodeAcpModelSelection<E>(input: {
   readonly requestedModelId: string | undefined;
   readonly mapError: (cause: EffectAcpErrors.AcpError) => E;
 }): Effect.Effect<string | undefined, E> {
-  const shouldSwitchModel =
-    input.requestedModelId !== undefined && input.requestedModelId !== input.currentModelId;
-  if (!shouldSwitchModel) {
-    return Effect.succeed(input.currentModelId);
-  }
-  return input.runtime
-    .setSessionModel(input.requestedModelId)
-    .pipe(Effect.mapError(input.mapError), Effect.as(input.requestedModelId));
+  // jcode does not support session/set_model; model is determined by its
+  // own provider/config. Return the current model without attempting a switch.
+  return Effect.succeed(input.requestedModelId ?? input.currentModelId);
 }
