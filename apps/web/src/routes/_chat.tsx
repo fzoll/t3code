@@ -10,6 +10,7 @@ import { usePrimaryEnvironmentId } from "../state/environments";
 import { selectProjectGroupingSettings } from "../logicalProject";
 import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
 import { dispatchPreviewAction } from "../components/preview/previewActionBus";
+import { useDesktopNotifications } from "../hooks/useDesktopNotifications";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { isPreviewFocused } from "../lib/previewFocus";
@@ -175,6 +176,7 @@ function ChatRouteGlobalShortcuts() {
 }
 
 function ChatRouteLayout() {
+  useDesktopNotifications();
   return (
     <>
       <ChatRouteGlobalShortcuts />
