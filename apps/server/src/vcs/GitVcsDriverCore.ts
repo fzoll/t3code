@@ -728,13 +728,26 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
               }),
           ),
         );
+        const callerEnv = { ...process.env, ...input.env };
+        const ghToken = callerEnv.GH_TOKEN ?? callerEnv.GITHUB_TOKEN;
+        const credentialEnv: NodeJS.ProcessEnv = ghToken
+          ? {
+              GIT_TERMINAL_PROMPT: "0",
+              GIT_CONFIG_COUNT: "2",
+              GIT_CONFIG_KEY_0: "credential.helper",
+              GIT_CONFIG_VALUE_0: "",
+              GIT_CONFIG_KEY_1: "credential.helper",
+              GIT_CONFIG_VALUE_1: "!f() { echo \"password=$GH_TOKEN\"; }; f",
+              GH_TOKEN: ghToken,
+            }
+          : {};
         const child = yield* commandSpawner
           .spawn(
             ChildProcess.make("git", commandInput.args, {
               cwd: commandInput.cwd,
               env: {
-                ...process.env,
-                ...input.env,
+                ...callerEnv,
+                ...credentialEnv,
                 ...trace2Monitor.env,
               },
             }),
@@ -2888,7 +2901,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
   const deleteBranch = Effect.fn("deleteBranch")(function* (input: {
     readonly cwd: string;
     readonly branch: string;
-    readonly force?: boolean;
+    readonly force?: boolean | undefined;
   }) {
     yield* executeGit(
       "GitVcsDriver.deleteBranch",
