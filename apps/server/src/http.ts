@@ -128,11 +128,12 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
         if (sessionPids.length === 0) {
           return descriptor;
         }
-        const processRows = yield* ProcessDiagnostics.readProcessRows.pipe(
-          Effect.orElseSucceed(() => []),
+        const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
+        const diagnosticsResult = yield* processDiagnostics.read.pipe(
+          Effect.orElseSucceed(() => ({ processes: [] as Array<{ pid: number; rssBytes: number }> })),
         );
         const rssByPid = new Map<number, number>();
-        for (const row of processRows) {
+        for (const row of diagnosticsResult.processes) {
           rssByPid.set(row.pid, row.rssBytes);
         }
         const sessions = sessionPids.map((s) => ({
