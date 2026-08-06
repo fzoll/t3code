@@ -1830,6 +1830,18 @@ const makeWsRpcLayer = (
             gitWorkflow.removeWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "vcs" },
           ),
+        [WS_METHODS.vcsPruneWorktrees]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vcsPruneWorktrees,
+            gitWorkflow.pruneWorktrees(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "vcs" },
+          ),
+        [WS_METHODS.vcsDeleteBranch]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vcsDeleteBranch,
+            gitWorkflow.deleteBranch(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "vcs" },
+          ),
         [WS_METHODS.vcsCreateRef]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsCreateRef,
