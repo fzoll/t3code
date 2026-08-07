@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import { HttpClient } from "effect/unstable/http";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -82,7 +83,7 @@ export const KimiDriver: ProviderDriver<KimiSettings, KimiDriverEnv> = {
   },
   configSchema: KimiSettings,
   defaultConfig: (): KimiSettings => decodeKimiSettings({}),
-  create: ({ instanceId, displayName, accentColor, environment, enabled, config }) =>
+  create: (({ instanceId, displayName, accentColor, environment, enabled, config }) =>
     Effect.gen(function* () {
       const crypto = yield* Crypto.Crypto;
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -156,11 +157,11 @@ export const KimiDriver: ProviderDriver<KimiSettings, KimiDriverEnv> = {
         driverKind: DRIVER_KIND,
         continuationIdentity,
         displayName,
-        accentColor,
+        ...(accentColor !== undefined ? { accentColor } : {}),
         enabled,
         snapshot,
         adapter,
         textGeneration,
-      } satisfies ProviderInstance;
-    }),
+      } as ProviderInstance;
+    })) as ProviderDriver<KimiSettings, KimiDriverEnv>["create"],
 };

@@ -60,7 +60,7 @@ import {
 import { type JcodeAdapterShape } from "../Services/JcodeAdapter.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 
-const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.UnknownFromJsonString);
+const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
 
 const PROVIDER = ProviderDriverKind.make("jcode");
 const JCODE_RESUME_VERSION = 1 as const;
