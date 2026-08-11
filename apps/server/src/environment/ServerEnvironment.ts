@@ -11,7 +11,21 @@ import * as Schema from "effect/Schema";
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
+import { resolveServerBuildSha } from "./ServerBuildSha.ts";
 import { resolveServerEnvironmentLabel } from "./ServerEnvironmentLabel.ts";
+
+/**
+ * Source-mode checkouts (e.g. the RPi in #1) never bump package.json's
+ * semver per commit, so a stale `apps/web/dist` bundle built before a
+ * schema-changing pull can share the exact same serverVersion as the
+ * freshly restarted server, silently defeating client/server version-skew
+ * detection. Suffixing the real checkout SHA (when resolvable) makes any
+ * such drift visible; packaged builds without a `.git` directory fall back
+ * to the plain semver unchanged.
+ */
+function buildServerVersion(buildSha: string | null): string {
+  return buildSha ? `${packageJson.version}+git.${buildSha.slice(0, 12)}` : packageJson.version;
+}
 
 export class ServerEnvironmentIdPersistenceError extends Schema.TaggedErrorClass<ServerEnvironmentIdPersistenceError>()(
   "ServerEnvironmentIdPersistenceError",
@@ -124,6 +138,7 @@ export const make = Effect.gen(function* () {
   const environmentId = EnvironmentId.make(environmentIdRaw);
   const cwdBaseName = path.basename(serverConfig.cwd).trim();
   const label = yield* resolveServerEnvironmentLabel({ cwdBaseName });
+  const buildSha = yield* resolveServerBuildSha();
 
   const descriptor: ExecutionEnvironmentDescriptor = {
     environmentId,
@@ -132,7 +147,7 @@ export const make = Effect.gen(function* () {
       os: platformOs(hostPlatform),
       arch: platformArch(hostArchitecture),
     },
-    serverVersion: packageJson.version,
+    serverVersion: buildServerVersion(buildSha),
     capabilities: {
       repositoryIdentity: true,
       connectionProbe: true,
