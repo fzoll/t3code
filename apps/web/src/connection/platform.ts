@@ -293,7 +293,11 @@ const capabilitiesLayer = Layer.effectContext(
 // connect is even attempted, gives a concrete, correlated cause for a
 // SchemaError that follows instead of leaving it as an opaque defect.
 const logDescriptorVersionMismatch = (serverVersion: string) => {
-  const mismatch = resolveVersionMismatch(serverVersion);
+  // Both callers bootstrap a same-machine connection (the primary origin, or
+  // a desktop-local secondary like WSL) built from the same checkout as this
+  // client, so build-metadata (SHA) drift is a meaningful signal here — unlike
+  // comparing against an arbitrary remote peer environment.
+  const mismatch = resolveVersionMismatch(serverVersion, { compareBuildMetadata: true });
   if (!mismatch) {
     return Effect.void;
   }

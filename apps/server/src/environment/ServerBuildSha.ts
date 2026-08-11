@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 
 import * as ProcessRunner from "../processRunner.ts";
 
-const GIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
+const GIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 /**
  * Source-mode nodes (e.g. an RPi running `node apps/server/src/bin.ts serve`

@@ -23,16 +23,38 @@ function normalizeVersion(version: string | null | undefined): string | null {
   return trimmed && trimmed.length > 0 ? trimmed : null;
 }
 
+// Versions are stamped as `<semver>+git.<sha>` on source-mode checkouts (#1).
+// The SHA is only meaningful when comparing a client against the server that
+// serves its own bundle (the primary/local connection) — two healthy nodes
+// in a fleet are routinely on different commits, so build metadata is
+// stripped by default and remote/secondary environments must not opt in.
+function stripBuildMetadata(version: string): string {
+  const separatorIndex = version.indexOf("+");
+  return separatorIndex === -1 ? version : version.slice(0, separatorIndex);
+}
+
+export interface ResolveVersionMismatchOptions {
+  readonly compareBuildMetadata?: boolean;
+}
+
 export function resolveVersionMismatch(
   serverVersion: string | null | undefined,
+  options?: ResolveVersionMismatchOptions,
 ): VersionMismatch | null {
   const normalizedClientVersion = normalizeVersion(APP_VERSION);
   const normalizedServerVersion = normalizeVersion(serverVersion);
-  if (
-    !normalizedClientVersion ||
-    !normalizedServerVersion ||
-    normalizedClientVersion === normalizedServerVersion
-  ) {
+  if (!normalizedClientVersion || !normalizedServerVersion) {
+    return null;
+  }
+
+  const compareBuildMetadata = options?.compareBuildMetadata ?? false;
+  const clientComparable = compareBuildMetadata
+    ? normalizedClientVersion
+    : stripBuildMetadata(normalizedClientVersion);
+  const serverComparable = compareBuildMetadata
+    ? normalizedServerVersion
+    : stripBuildMetadata(normalizedServerVersion);
+  if (clientComparable === serverComparable) {
     return null;
   }
 
@@ -45,8 +67,9 @@ export function resolveVersionMismatch(
 
 export function resolveServerConfigVersionMismatch(
   serverConfig: Pick<ServerConfig, "environment"> | null | undefined,
+  options?: ResolveVersionMismatchOptions,
 ): VersionMismatch | null {
-  return resolveVersionMismatch(serverConfig?.environment.serverVersion);
+  return resolveVersionMismatch(serverConfig?.environment.serverVersion, options);
 }
 
 export function buildVersionMismatchDismissalKey(

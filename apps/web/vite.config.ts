@@ -59,26 +59,9 @@ const resolveBuildGitSha = Effect.fn("resolveBuildGitSha")(function* () {
     return null;
   }
   const sha = stdout.trim().toLowerCase();
-  return /^[0-9a-f]{40}$/i.test(sha) ? sha : null;
+  return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
 });
 
-const configuredBuildGitSha = await Effect.runPromise(
-  resolveBuildGitSha().pipe(
-    Effect.orElseSucceed(() => null),
-    Effect.scoped,
-    Effect.provide(NodeServices.layer),
-  ),
-);
-
-const configuredAppVersion = (() => {
-  const explicitAppVersion = process.env.APP_VERSION?.trim();
-  if (explicitAppVersion) {
-    return explicitAppVersion;
-  }
-  return configuredBuildGitSha
-    ? `${pkg.version}+git.${configuredBuildGitSha.slice(0, 12)}`
-    : pkg.version;
-})();
 const configuredHostedAppUrl = (() => {
   const explicitHostedAppUrl = process.env.VITE_HOSTED_APP_URL?.trim();
   if (explicitHostedAppUrl) {
@@ -143,7 +126,30 @@ function resolveDevProxyTarget(wsUrl: string | undefined): string | undefined {
 
 const devProxyTarget = resolveDevProxyTarget(configuredWsUrl);
 
-export default defineConfig(() => {
+export default defineConfig(async ({ command }) => {
+  // Only spawn `git rev-parse` for actual production builds — dev/test
+  // invocations don't ship a bundle, so there's no drift risk to stamp.
+  const configuredBuildGitSha =
+    command === "build"
+      ? await Effect.runPromise(
+          resolveBuildGitSha().pipe(
+            Effect.orElseSucceed(() => null),
+            Effect.scoped,
+            Effect.provide(NodeServices.layer),
+          ),
+        )
+      : null;
+
+  const configuredAppVersion = (() => {
+    const explicitAppVersion = process.env.APP_VERSION?.trim();
+    if (explicitAppVersion) {
+      return explicitAppVersion;
+    }
+    return configuredBuildGitSha
+      ? `${pkg.version}+git.${configuredBuildGitSha.slice(0, 12)}`
+      : pkg.version;
+  })();
+
   return {
     plugins: [
       tanstackRouter(),

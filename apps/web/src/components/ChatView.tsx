@@ -1768,7 +1768,15 @@ function ChatViewContent(props: ChatViewProps) {
   const serverConfig = activeThread
     ? (activeEnvironment?.serverConfig ?? null)
     : (primaryEnvironment?.serverConfig ?? null);
-  const versionMismatch = resolveServerConfigVersionMismatch(serverConfig);
+  // Build-metadata (SHA) drift only means something for the primary
+  // environment, which serves this client's own bundle — a thread pinned to
+  // a remote peer on a different commit is normal operation, not staleness.
+  const isPrimaryServerConfig = activeThread
+    ? activeThread.environmentId === primaryEnvironmentId
+    : true;
+  const versionMismatch = resolveServerConfigVersionMismatch(serverConfig, {
+    compareBuildMetadata: isPrimaryServerConfig,
+  });
   const versionMismatchDismissKey =
     versionMismatch && activeThread
       ? buildVersionMismatchDismissalKey(activeThread.environmentId, versionMismatch)

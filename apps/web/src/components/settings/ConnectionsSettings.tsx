@@ -1824,7 +1824,12 @@ export function ConnectionsSettings() {
     DesktopServerExposureState["mode"] | null
   >(null);
   const primaryServerConfig = primaryEnvironment?.serverConfig ?? null;
-  const primaryVersionMismatch = resolveServerConfigVersionMismatch(primaryServerConfig);
+  // The primary environment serves this client's own bundle, so build-metadata
+  // (SHA) drift is meaningful here — unlike the saved/remote environment rows
+  // below, which compare at release granularity only.
+  const primaryVersionMismatch = resolveServerConfigVersionMismatch(primaryServerConfig, {
+    compareBuildMetadata: true,
+  });
   const [isAdvertisedEndpointListExpanded, setIsAdvertisedEndpointListExpanded] = useState(false);
   const defaultAdvertisedEndpointKey = useUiStateStore(
     (state) => state.defaultAdvertisedEndpointKey,
