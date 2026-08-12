@@ -68,6 +68,30 @@ describe("versionSkew", () => {
     ).toBe(false);
   });
 
+  it("ignores build-metadata drift by default (remote peer on a different commit)", () => {
+    expect(resolveVersionMismatch(`${APP_VERSION}+git.abc123def456`)).toBeNull();
+  });
+
+  it("flags build-metadata drift when compareBuildMetadata is requested (primary connection)", () => {
+    expect(
+      resolveVersionMismatch(`${APP_VERSION}+git.abc123def456`, { compareBuildMetadata: true }),
+    ).toEqual({
+      clientVersion: APP_VERSION,
+      serverVersion: `${APP_VERSION}+git.abc123def456`,
+      hint: "Version mismatch. Try syncing the client and server to the same T3 Code version.",
+    });
+  });
+
+  it("still flags a release-version mismatch regardless of compareBuildMetadata", () => {
+    expect(
+      resolveVersionMismatch("9.9.9+git.abc123def456", { compareBuildMetadata: true }),
+    ).toEqual({
+      clientVersion: APP_VERSION,
+      serverVersion: "9.9.9+git.abc123def456",
+      hint: "Version mismatch. Try syncing the client and server to the same T3 Code version.",
+    });
+  });
+
   it("appends a hint to connection errors when versions differ", () => {
     const mismatch = resolveVersionMismatch("9.9.9");
 

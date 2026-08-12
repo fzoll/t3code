@@ -1,7 +1,12 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
+import * as Effect from "effect/Effect";
+import * as PlatformError from "effect/PlatformError";
+import * as Stream from "effect/Stream";
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { defineProject, type TestProjectInlineConfiguration } from "vite-plus/test/config";
 import "vite-plus/test/config";
 import { defineConfig } from "vite-plus";
@@ -23,7 +28,40 @@ const configuredRelayTracingUrl = repoEnv.VITE_RELAY_OTLP_TRACES_URL?.trim() || 
 const configuredRelayTracingDataset = repoEnv.VITE_RELAY_OTLP_TRACES_DATASET?.trim() || "";
 const configuredRelayTracingToken = repoEnv.VITE_RELAY_OTLP_TRACES_TOKEN?.trim() || "";
 const configuredHostedAppChannel = process.env.VITE_HOSTED_APP_CHANNEL?.trim() || "";
-const configuredAppVersion = process.env.APP_VERSION?.trim() || pkg.version;
+
+// Source-mode deploys (e.g. #1's RPi node) build `apps/web/dist` only when
+// someone explicitly runs this build, separately from `git pull` restarting
+// the server. Since APP_VERSION otherwise tracks package.json's semver
+// (which doesn't bump per commit here), a stale bundle can silently share a
+// version string with a server that has since moved on to a
+// schema-incompatible commit. Stamping the checkout SHA this build ran from
+// lets the existing client/server version-mismatch check catch that drift.
+// Explicit APP_VERSION overrides (release builds) are left untouched.
+const collectStreamAsString = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
+  stream.pipe(
+    Stream.decodeText(),
+    Stream.runFold(
+      () => "",
+      (acc, chunk) => acc + chunk,
+    ),
+  );
+
+const resolveBuildGitSha = Effect.fn("resolveBuildGitSha")(function* () {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const child = yield* spawner.spawn(
+    ChildProcess.make("git", ["rev-parse", "HEAD"], { cwd: import.meta.dirname }),
+  );
+  const [stdout, exitCode] = yield* Effect.all(
+    [collectStreamAsString(child.stdout), child.exitCode],
+    { concurrency: "unbounded" },
+  );
+  if (Number(exitCode) !== 0) {
+    return null;
+  }
+  const sha = stdout.trim().toLowerCase();
+  return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+});
+
 const configuredHostedAppUrl = (() => {
   const explicitHostedAppUrl = process.env.VITE_HOSTED_APP_URL?.trim();
   if (explicitHostedAppUrl) {
@@ -88,7 +126,30 @@ function resolveDevProxyTarget(wsUrl: string | undefined): string | undefined {
 
 const devProxyTarget = resolveDevProxyTarget(configuredWsUrl);
 
-export default defineConfig(() => {
+export default defineConfig(async ({ command }) => {
+  // Only spawn `git rev-parse` for actual production builds — dev/test
+  // invocations don't ship a bundle, so there's no drift risk to stamp.
+  const configuredBuildGitSha =
+    command === "build"
+      ? await Effect.runPromise(
+          resolveBuildGitSha().pipe(
+            Effect.orElseSucceed(() => null),
+            Effect.scoped,
+            Effect.provide(NodeServices.layer),
+          ),
+        )
+      : null;
+
+  const configuredAppVersion = (() => {
+    const explicitAppVersion = process.env.APP_VERSION?.trim();
+    if (explicitAppVersion) {
+      return explicitAppVersion;
+    }
+    return configuredBuildGitSha
+      ? `${pkg.version}+git.${configuredBuildGitSha.slice(0, 12)}`
+      : pkg.version;
+  })();
+
   return {
     plugins: [
       tanstackRouter(),
