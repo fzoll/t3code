@@ -66,7 +66,13 @@ const ExternalMcpTransportLive = McpServer.layerHttp({
   protocols: [McpProtocol.v2025_06_18],
 }).pipe(Layer.provide(ExternalMcpAuthMiddlewareLive));
 
-export const layer = McpServer.toolkit(ExternalToolkit).pipe(
-  Layer.provide(ExternalToolkitHandlersLive),
-  Layer.provideMerge(ExternalMcpTransportLive),
+// Layer.fresh wraps toolkit registration and transport together so both
+// resolve one private McpServer registry: the module-level McpServer.layer
+// is otherwise memoized across transports and the diagnostic toolkit would
+// leak into the provider-session /mcp endpoint (and vice versa).
+export const layer = Layer.fresh(
+  McpServer.toolkit(ExternalToolkit).pipe(
+    Layer.provide(ExternalToolkitHandlersLive),
+    Layer.provideMerge(ExternalMcpTransportLive),
+  ),
 );

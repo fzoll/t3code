@@ -234,7 +234,20 @@ const handlers = {
     Effect.gen(function* () {
       yield* requireScope(AuthOrchestrationOperateScope);
       const registry = yield* ProviderRegistry;
-      return yield* registry.refresh();
+      // Re-probing every provider CLI can hang on machines where a CLI is
+      // broken; cap the wait so the MCP call fails loudly instead of stalling.
+      return yield* registry.refresh().pipe(
+        Effect.timeoutOrElse({
+          duration: "45 seconds",
+          orElse: () =>
+            Effect.fail(
+              new ExternalDiagnosticsError({
+                code: "refresh_timeout",
+                message: "Provider refresh did not finish within 45 seconds.",
+              }),
+            ),
+        }),
+      );
     }),
 } satisfies Parameters<typeof ExternalToolkit.toLayer>[0];
 
