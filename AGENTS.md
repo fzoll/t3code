@@ -162,6 +162,7 @@ Access:
 - Tokens in `~/.cc-runner/t3-tokens/*.token` are long-lived access tokens (managed by cc_runner); use directly as Bearer.
 - Fresh pairing when needed: on the node run `T3CODE_PORT=3773 node apps/server/src/bin.ts auth pairing create --base-dir ~/.t3 --ttl 30m --label <label>`, then OAuth token-exchange — full flow in the `t3-project-setup` skill.
 - Key HTTP endpoints (Bearer): `GET /.well-known/t3/environment` (no auth), `GET /api/orchestration/shell` (all projects incl. env vars — sensitive values are NOT redacted), `POST /api/orchestration/dispatch` (raw `ClientOrchestrationCommand` JSON, e.g. `project.meta.update`; `environment` is a full-array replace).
+- MCP diagnostics: `POST /mcp/external` — streamable-HTTP MCP server (same Bearer token; send `MCP-Protocol-Version: 2025-06-18` on every post-initialize request). Tools: t3_server_health, t3_providers_list, t3_threads_list, t3_thread_detail, t3_server_logs, t3_server_diagnostics, t3_migrations_status, t3_thread_interrupt, t3_thread_stop, t3_providers_refresh. Deployed on all three nodes 2026-08-16.
 
 Git identity rule for per-project env vars on every node:
 - `GIT_AUTHOR_NAME=fzowl` → `GIT_AUTHOR_EMAIL=zoltan@voyageai.com` (work; most projects)
