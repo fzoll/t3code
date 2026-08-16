@@ -60,6 +60,24 @@ function pickPrimaryRemote(
   return remoteName && remoteUrl ? { remoteName, remoteUrl } : null;
 }
 
+// Workspace remotes may embed credentials in their URLs (e.g. the
+// x-access-token form T3 writes for token-authenticated clones). The snapshot
+// travels to every client, so strip userinfo before exposing a remote URL.
+function stripRemoteUrlCredentials(remoteUrl: string): string {
+  try {
+    const parsed = new URL(remoteUrl);
+    if (parsed.username.length === 0 && parsed.password.length === 0) {
+      return remoteUrl;
+    }
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.toString();
+  } catch {
+    // scp-like syntax (git@host:path) — no URL userinfo to strip.
+    return remoteUrl;
+  }
+}
+
 function buildRepositoryIdentity(input: {
   readonly remoteName: string;
   readonly remoteUrl: string;
@@ -80,7 +98,10 @@ function buildRepositoryIdentity(input: {
       remoteName: input.remoteName,
       remoteUrl: input.remoteUrl,
     },
-    remotes: [...input.remotes].map(([name, url]) => ({ name, url })),
+    remotes: [...input.remotes].map(([name, url]) => ({
+      name,
+      url: stripRemoteUrlCredentials(url),
+    })),
     rootPath: input.rootPath,
     ...(repositoryPath ? { displayName: repositoryPath } : {}),
     ...(sourceControlProvider ? { provider: sourceControlProvider.kind } : {}),

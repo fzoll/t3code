@@ -137,6 +137,33 @@ it.layer(NodeServices.layer)("RepositoryIdentityResolverLive", (it) => {
     }).pipe(Effect.provide(RepositoryIdentityResolver.layer)),
   );
 
+  it.effect("strips embedded credentials from remote urls in the remotes list", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const cwd = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-repository-identity-credential-test-",
+      });
+
+      yield* git(cwd, ["init"]);
+      yield* git(cwd, [
+        "remote",
+        "add",
+        "origin",
+        "https://x-access-token:ghp_secret@github.com/voyage-ai/elasticsearch.git",
+      ]);
+      yield* git(cwd, ["remote", "add", "upstream", "https://github.com/elastic/elasticsearch.git"]);
+
+      const resolver = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
+      const identity = yield* resolver.resolve(cwd);
+
+      expect(identity).not.toBeNull();
+      expect(identity?.remotes).toEqual([
+        { name: "origin", url: "https://github.com/voyage-ai/elasticsearch.git" },
+        { name: "upstream", url: "https://github.com/elastic/elasticsearch.git" },
+      ]);
+    }).pipe(Effect.provide(RepositoryIdentityResolver.layer)),
+  );
+
   it.effect("uses the last remote path segment as the repository name for nested groups", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
