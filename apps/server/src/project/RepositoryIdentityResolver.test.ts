@@ -58,6 +58,9 @@ it.layer(NodeServices.layer)("RepositoryIdentityResolverLive", (it) => {
       expect(identity?.provider).toBe("github");
       expect(identity?.owner).toBe("t3tools");
       expect(identity?.name).toBe("t3code");
+      expect(identity?.remotes).toEqual([
+        { name: "origin", url: "git@github.com:T3Tools/t3code.git" },
+      ]);
     }).pipe(Effect.provide(RepositoryIdentityResolver.layer)),
   );
 
@@ -127,6 +130,10 @@ it.layer(NodeServices.layer)("RepositoryIdentityResolverLive", (it) => {
       expect(identity?.locator.remoteName).toBe("upstream");
       expect(identity?.canonicalKey).toBe("github.com/t3tools/t3code");
       expect(identity?.displayName).toBe("t3tools/t3code");
+      expect(identity?.remotes).toEqual([
+        { name: "origin", url: "git@github.com:julius/t3code.git" },
+        { name: "upstream", url: "git@github.com:T3Tools/t3code.git" },
+      ]);
     }).pipe(Effect.provide(RepositoryIdentityResolver.layer)),
   );
 

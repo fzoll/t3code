@@ -64,6 +64,7 @@ function buildRepositoryIdentity(input: {
   readonly remoteName: string;
   readonly remoteUrl: string;
   readonly rootPath: string;
+  readonly remotes: ReadonlyMap<string, string>;
 }): RepositoryIdentity {
   const canonicalKey = normalizeGitRemoteUrl(input.remoteUrl);
   const sourceControlProvider = detectSourceControlProviderFromGitRemoteUrl(input.remoteUrl);
@@ -79,6 +80,7 @@ function buildRepositoryIdentity(input: {
       remoteName: input.remoteName,
       remoteUrl: input.remoteUrl,
     },
+    remotes: [...input.remotes].map(([name, url]) => ({ name, url })),
     rootPath: input.rootPath,
     ...(repositoryPath ? { displayName: repositoryPath } : {}),
     ...(sourceControlProvider ? { provider: sourceControlProvider.kind } : {}),
@@ -131,8 +133,9 @@ const resolveRepositoryIdentityFromCacheKey = Effect.fn(
     return null;
   }
 
-  const remote = pickPrimaryRemote(parseRemoteFetchUrls(remoteResult.value.stdout));
-  return remote ? buildRepositoryIdentity({ ...remote, rootPath: cacheKey }) : null;
+  const remotes = parseRemoteFetchUrls(remoteResult.value.stdout);
+  const remote = pickPrimaryRemote(remotes);
+  return remote ? buildRepositoryIdentity({ ...remote, rootPath: cacheKey, remotes }) : null;
 });
 
 export const make = Effect.fn("RepositoryIdentityResolver.make")(function* (

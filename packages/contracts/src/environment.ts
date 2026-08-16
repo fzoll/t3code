@@ -102,9 +102,21 @@ export const RepositoryIdentityLocator = Schema.Struct({
 });
 export type RepositoryIdentityLocator = typeof RepositoryIdentityLocator.Type;
 
+export const RepositoryRemote = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  url: TrimmedNonEmptyString,
+});
+export type RepositoryRemote = typeof RepositoryRemote.Type;
+
 export const RepositoryIdentity = Schema.Struct({
   canonicalKey: TrimmedNonEmptyString,
   locator: RepositoryIdentityLocator,
+  /**
+   * Every fetch remote of the checkout in `git remote -v` order. The locator
+   * still points at the selected primary remote; forks carry both origin and
+   * upstream here so consumers no longer have to read .git/config themselves.
+   */
+  remotes: Schema.optionalKey(Schema.Array(RepositoryRemote)),
   rootPath: Schema.optionalKey(TrimmedNonEmptyString),
   displayName: Schema.optionalKey(TrimmedNonEmptyString),
   provider: Schema.optionalKey(TrimmedNonEmptyString),
