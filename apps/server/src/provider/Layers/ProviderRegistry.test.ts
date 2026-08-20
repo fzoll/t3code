@@ -1546,9 +1546,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             // `firstMissing`, so the real spawner yields ENOENT and the
             // snapshot should be `status: "error"`.
             let initialProviders = yield* registry.getProviders;
+            // The poll budget has to cover a real ENOENT spawn round-trip while
+            // the fork's extra provider instances (jcode, kimi) probe their own
+            // binaries on the same boot. 50 iterations was enough upstream with
+            // fewer providers; on a loaded machine it is not.
             for (
               let attempts = 0;
-              attempts < 50 &&
+              attempts < 300 &&
               initialProviders.find((provider) => provider.instanceId === "codex")?.status !==
                 "error";
               attempts += 1
@@ -1582,7 +1586,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             // executable. This verifies the public settings-to-probe behavior
             // without depending on timestamps assigned by TestClock.
             const refreshed = yield* Effect.gen(function* () {
-              for (let attempts = 0; attempts < 60; attempts += 1) {
+              for (let attempts = 0; attempts < 300; attempts += 1) {
                 const providers = yield* registry.getProviders;
                 const codex = providers.find((provider) => provider.instanceId === "codex");
                 if (
