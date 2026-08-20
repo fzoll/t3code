@@ -1,26 +1,29 @@
 // @effect-diagnostics nodeBuiltinImport:off
-import { execSync } from "node:child_process";
-import * as fs from "node:fs";
-import * as os from "node:os";
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
 
 /**
  * Kernel-aware available memory — not just "free" pages.
  * Linux: MemAvailable from /proc/meminfo.
  * macOS: vm_stat free + inactive + speculative + purgeable.
  * Fallback: os.freemem() (understates on both platforms).
+ *
+ * The platform is passed in rather than read from `node:os` so Effect callers
+ * resolve it through `HostProcessPlatform` and tests can pin it.
  */
-export function availableMemoryMb(): number {
-  if (os.platform() === "linux") {
+export function availableMemoryMb(platform: NodeJS.Platform): number {
+  if (platform === "linux") {
     try {
-      const meminfo = fs.readFileSync("/proc/meminfo", "utf8");
+      const meminfo = NodeFS.readFileSync("/proc/meminfo", "utf8");
       const match = meminfo.match(/MemAvailable:\s+(\d+)/);
       if (match?.[1]) return Math.round(parseInt(match[1]) / 1024);
     } catch {}
   }
 
-  if (os.platform() === "darwin") {
+  if (platform === "darwin") {
     try {
-      const vmstat = execSync("vm_stat", { encoding: "utf8" });
+      const vmstat = NodeChildProcess.execSync("vm_stat", { encoding: "utf8" });
       const pageSizeMatch = vmstat.match(/page size of (\d+) bytes/);
       const pageSize = pageSizeMatch?.[1] ? parseInt(pageSizeMatch[1]) : 16384;
       const page = (key: string) => {
@@ -33,5 +36,5 @@ export function availableMemoryMb(): number {
     } catch {}
   }
 
-  return Math.round(os.freemem() / 1024 / 1024);
+  return Math.round(NodeOS.freemem() / 1024 / 1024);
 }

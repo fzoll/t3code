@@ -739,7 +739,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
               GIT_CONFIG_KEY_0: "credential.helper",
               GIT_CONFIG_VALUE_0: "",
               GIT_CONFIG_KEY_1: "credential.helper",
-              GIT_CONFIG_VALUE_1: "!f() { echo \"password=$GH_TOKEN\"; }; f",
+              GIT_CONFIG_VALUE_1: '!f() { echo "password=$GH_TOKEN"; }; f',
               GH_TOKEN: ghToken,
             }
           : {};
@@ -809,10 +809,20 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         yield* trace2Monitor.flush;
 
         if (!input.allowNonZeroExit && exitCode !== 0) {
-          const stderrDetail = stderr.text.trim().slice(0, 500);
+          // Git echoes its own arguments back in error output, so stderr can
+          // carry an embedded credential from a remote URL. `GitCommandError`
+          // reaches clients and the persisted event log, so the raw text stays
+          // here in the server's debug log and never rides on the error.
+          yield* Effect.logDebug("Git command failed").pipe(
+            Effect.annotateLogs({
+              operation: commandInput.operation,
+              exitCode,
+              stderr: stderr.text.trim().slice(0, 2000),
+            }),
+          );
           return yield* new GitCommandError({
             ...gitCommandContext(commandInput),
-            detail: stderrDetail || "Git command exited with a non-zero status.",
+            detail: "Git command exited with a non-zero status.",
             exitCode,
             stdoutLength: stdout.text.length,
             stderrLength: stderr.text.length,
@@ -894,16 +904,25 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         if (options.allowNonZeroExit || result.exitCode === 0) {
           return Effect.succeed(result);
         }
-        const stderrDetail = result.stderr.trim().slice(0, 500);
-        const fallback = options.fallbackErrorDetail ?? "Git command exited with a non-zero status.";
-        return Effect.fail(
-          new GitCommandError({
-            ...gitCommandContext({ operation, cwd, args }),
-            detail: stderrDetail || fallback,
-            ...(result.exitCode === null ? {} : { exitCode: result.exitCode }),
-            stdoutLength: result.stdout.length,
-            stderrLength: result.stderr.length,
+        // Same reasoning as the non-zero exit path above: the raw stderr is
+        // debug-log-only, the error carries a stable detail.
+        return Effect.logDebug("Git command failed").pipe(
+          Effect.annotateLogs({
+            operation,
+            exitCode: result.exitCode,
+            stderr: result.stderr.trim().slice(0, 2000),
           }),
+          Effect.andThen(
+            Effect.fail(
+              new GitCommandError({
+                ...gitCommandContext({ operation, cwd, args }),
+                detail: options.fallbackErrorDetail ?? "Git command exited with a non-zero status.",
+                ...(result.exitCode === null ? {} : { exitCode: result.exitCode }),
+                stdoutLength: result.stdout.length,
+                stderrLength: result.stderr.length,
+              }),
+            ),
+          ),
         );
       }),
     );

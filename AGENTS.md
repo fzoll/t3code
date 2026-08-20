@@ -150,20 +150,22 @@ Full glossary with file links: `docs/internals/glossary.md`
 
 Four T3 server instances (3 real nodes + 1 local dev instance):
 
-| # | Node | Host:Port | Base dir | Access |
-|---|------|-----------|----------|--------|
-| 1 | Mac prod (Desktop app) | `127.0.0.1:3773` | `~/.t3/userdata` | local CLI pairing, or token `~/.cc-runner/t3-tokens/mac.token` |
-| 2 | RPi HERMES | `100.110.73.28:3773` (Tailscale) | `~/.t3/userdata` on RPi | SSH `fzowl@100.110.73.28` (BatchMode works), or token `~/.cc-runner/t3-tokens/rpi.token` |
-| 3 | HA T3 runner | `100.94.47.63:3773` (Tailscale, `homeassistant-1`) | Home Assistant add-on docker container | **no SSH** — token `~/.cc-runner/t3-tokens/ha.token` as `Authorization: Bearer`; HTTP API is the only path |
-| 4 | Mac dev instance | `127.0.0.1:13774` | `~/.t3/dev` | local only; started while developing t3code, not a real node |
+| #   | Node                   | Host:Port                                          | Base dir                               | Access                                                                                                     |
+| --- | ---------------------- | -------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 1   | Mac prod (Desktop app) | `127.0.0.1:3773`                                   | `~/.t3/userdata`                       | local CLI pairing, or token `~/.cc-runner/t3-tokens/mac.token`                                             |
+| 2   | RPi HERMES             | `100.110.73.28:3773` (Tailscale)                   | `~/.t3/userdata` on RPi                | SSH `fzowl@100.110.73.28` (BatchMode works), or token `~/.cc-runner/t3-tokens/rpi.token`                   |
+| 3   | HA T3 runner           | `100.94.47.63:3773` (Tailscale, `homeassistant-1`) | Home Assistant add-on docker container | **no SSH** — token `~/.cc-runner/t3-tokens/ha.token` as `Authorization: Bearer`; HTTP API is the only path |
+| 4   | Mac dev instance       | `127.0.0.1:13774`                                  | `~/.t3/dev`                            | local only; started while developing t3code, not a real node                                               |
 
 Access:
+
 - Tokens in `~/.cc-runner/t3-tokens/*.token` are long-lived access tokens (managed by cc_runner); use directly as Bearer.
 - Fresh pairing when needed: on the node run `T3CODE_PORT=3773 node apps/server/src/bin.ts auth pairing create --base-dir ~/.t3 --ttl 30m --label <label>`, then OAuth token-exchange — full flow in the `t3-project-setup` skill.
 - Key HTTP endpoints (Bearer): `GET /.well-known/t3/environment` (no auth), `GET /api/orchestration/shell` (all projects incl. env vars — sensitive values are NOT redacted), `POST /api/orchestration/dispatch` (raw `ClientOrchestrationCommand` JSON, e.g. `project.meta.update`; `environment` is a full-array replace).
 - MCP diagnostics: `POST /mcp/external` — streamable-HTTP MCP server (same Bearer token; send `MCP-Protocol-Version: 2025-06-18` on every post-initialize request). Tools: t3_server_health, t3_providers_list, t3_threads_list, t3_thread_detail, t3_server_logs, t3_server_diagnostics, t3_migrations_status, t3_thread_interrupt, t3_thread_stop, t3_providers_refresh. Deployed on all three nodes 2026-08-16.
 
 Git identity rule for per-project env vars on every node:
+
 - `GIT_AUTHOR_NAME=fzowl` → `GIT_AUTHOR_EMAIL=zoltan@voyageai.com` (work; most projects)
 - `GIT_AUTHOR_NAME=fzoll` → `GIT_AUTHOR_EMAIL=fodizoltan@gmail.com` (personal: tellmemore, mteb, bevasarlas, cc_runner, t3code, other small projects)
 - Committer name/email = author name/email; `GH_TOKEN` owner must match the author name. GitHub attributes commits by author email — mixing identities misattributes commits (2026-08-15 incident: 46 projects × 3 nodes fixed).

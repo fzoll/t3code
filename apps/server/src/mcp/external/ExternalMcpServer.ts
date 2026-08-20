@@ -32,25 +32,24 @@ type AuthenticatedHttpEffect = Effect.Effect<
 >;
 
 const makeAuthMiddleware = EnvironmentAuth.EnvironmentAuth.pipe(
-  Effect.map(
-    (serverAuth) =>
-      Effect.fn("ExternalMcpServer.authenticateRequest")(function* (
-        httpEffect: AuthenticatedHttpEffect,
-      ) {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const session = yield* serverAuth.authenticateHttpRequest(request).pipe(Effect.option);
-        if (session._tag === "None") {
-          yield* Effect.logWarning("rejected external MCP request with an unusable credential");
-          return unauthorized;
-        }
-        return yield* httpEffect.pipe(
-          Effect.provideService(EnvironmentAuthenticatedPrincipal, {
-            ...session.value,
-            scopes: new Set(session.value.scopes),
-          }),
-          Effect.map(normalizeMcpHttpResponse),
-        );
-      }),
+  Effect.map((serverAuth) =>
+    Effect.fn("ExternalMcpServer.authenticateRequest")(function* (
+      httpEffect: AuthenticatedHttpEffect,
+    ) {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const session = yield* serverAuth.authenticateHttpRequest(request).pipe(Effect.option);
+      if (session._tag === "None") {
+        yield* Effect.logWarning("rejected external MCP request with an unusable credential");
+        return unauthorized;
+      }
+      return yield* httpEffect.pipe(
+        Effect.provideService(EnvironmentAuthenticatedPrincipal, {
+          ...session.value,
+          scopes: new Set(session.value.scopes),
+        }),
+        Effect.map(normalizeMcpHttpResponse),
+      );
+    }),
   ),
   Effect.withSpan("ExternalMcpServer.makeAuthMiddleware"),
 );

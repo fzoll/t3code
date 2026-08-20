@@ -151,7 +151,12 @@ it.layer(NodeServices.layer)("RepositoryIdentityResolverLive", (it) => {
         "origin",
         "https://x-access-token:ghp_secret@github.com/voyage-ai/elasticsearch.git",
       ]);
-      yield* git(cwd, ["remote", "add", "upstream", "https://github.com/elastic/elasticsearch.git"]);
+      yield* git(cwd, [
+        "remote",
+        "add",
+        "upstream",
+        "https://github.com/elastic/elasticsearch.git",
+      ]);
 
       const resolver = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
       const identity = yield* resolver.resolve(cwd);

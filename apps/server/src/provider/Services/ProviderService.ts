@@ -123,9 +123,7 @@ export interface ProviderServiceShape {
    * Enter drain mode: reject new session starts, wait for active sessions
    * to complete, then resolve. Used for graceful shutdown on SIGTERM.
    */
-  readonly drain: (options?: {
-    readonly timeoutMs?: number;
-  }) => Effect.Effect<void>;
+  readonly drain: (options?: { readonly timeoutMs?: number }) => Effect.Effect<void>;
 
   /**
    * Whether the service is currently in drain mode (rejecting new sessions).

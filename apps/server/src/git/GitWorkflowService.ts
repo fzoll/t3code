@@ -89,9 +89,7 @@ export class GitWorkflowService extends Context.Service<
     readonly pruneWorktrees: (
       input: VcsPruneWorktreesInput,
     ) => Effect.Effect<void, GitCommandError>;
-    readonly deleteBranch: (
-      input: VcsDeleteBranchInput,
-    ) => Effect.Effect<void, GitCommandError>;
+    readonly deleteBranch: (input: VcsDeleteBranchInput) => Effect.Effect<void, GitCommandError>;
     readonly createRef: (
       input: VcsCreateRefInput,
     ) => Effect.Effect<VcsCreateRefResult, GitCommandError>;

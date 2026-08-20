@@ -7,7 +7,7 @@
  *
  * @module ClaudeAdapterLive
  */
-import { spawn as childProcessSpawn } from "node:child_process";
+import * as NodeChildProcess from "node:child_process";
 import {
   type CanUseTool,
   query,
@@ -4228,7 +4228,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       let capturedPid: number | null = null;
       if (!queryOptions.spawnClaudeCodeProcess) {
         queryOptions.spawnClaudeCodeProcess = (spawnOptions) => {
-          const cp = childProcessSpawn(spawnOptions.command, spawnOptions.args, {
+          const cp = NodeChildProcess.spawn(spawnOptions.command, spawnOptions.args, {
             cwd: spawnOptions.cwd,
             env: spawnOptions.env,
             signal: spawnOptions.signal,

@@ -171,7 +171,7 @@ export const make = Effect.gen(function* () {
           ...baseDescriptor,
           capabilities: { ...baseDescriptor.capabilities, agentActivityPublishing },
           resources: {
-            freeMemoryMb: availableMemoryMb(),
+            freeMemoryMb: availableMemoryMb(hostPlatform),
             totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
           },
         }),

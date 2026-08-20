@@ -28,6 +28,8 @@ import { OtlpTracer } from "effect/unstable/observability";
 
 import * as NodeOS from "node:os";
 import * as ServerConfig from "./config.ts";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+
 import { availableMemoryMb } from "./diagnostics/availableMemory.ts";
 import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
@@ -129,6 +131,7 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
   Effect.fnUntraced(function* (handlers) {
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
     const providerService = yield* ProviderService;
+    const hostPlatform = yield* HostProcessPlatform;
     return handlers.handle(
       "descriptor",
       Effect.fn("environment.metadata.descriptor")(function* (args) {
@@ -142,7 +145,9 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
         }
         const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
         const diagnosticsResult = yield* processDiagnostics.read.pipe(
-          Effect.orElseSucceed(() => ({ processes: [] as Array<{ pid: number; rssBytes: number }> })),
+          Effect.orElseSucceed(() => ({
+            processes: [] as Array<{ pid: number; rssBytes: number }>,
+          })),
         );
         const rssByPid = new Map<number, number>();
         for (const row of diagnosticsResult.processes) {
@@ -157,7 +162,7 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
           ...descriptor,
           resources: {
             ...descriptor.resources,
-            freeMemoryMb: availableMemoryMb(),
+            freeMemoryMb: availableMemoryMb(hostPlatform),
             totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
             sessions,
           },

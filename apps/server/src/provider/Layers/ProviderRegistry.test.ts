@@ -1480,6 +1480,12 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
           const firstMissing = `t3code_codex_first_`;
           const secondMissing = `t3code_codex_second_`;
           const spawnedCommands: Array<string> = [];
+          // Other provider instances (jcode, kimi) probe their own binaries on
+          // the same boot; this assertion is about the codex executable only.
+          const codexSpawns = () =>
+            spawnedCommands.filter(
+              (command) => command === firstMissing || command === secondMissing,
+            );
           const serverSettings = yield* makeMutableServerSettingsService(
             decodeServerSettings(
               deepMerge(encodedDefaultServerSettings, {
@@ -1548,7 +1554,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             );
             assert.strictEqual(initialCodex?.status, "error");
             assert.strictEqual(initialCodex?.installed, false);
-            assert.deepStrictEqual(spawnedCommands, [firstMissing]);
+            assert.deepStrictEqual(codexSpawns(), [firstMissing]);
 
             // Drive a settings change. The Hydration layer's
             // `SettingsWatcherLive` consumes this via `streamChanges`,
@@ -1585,7 +1591,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             });
 
             const reprobedCodex = refreshed.find((provider) => provider.instanceId === "codex");
-            assert.deepStrictEqual(spawnedCommands, [firstMissing, secondMissing]);
+            assert.deepStrictEqual(codexSpawns(), [firstMissing, secondMissing]);
             assert.strictEqual(reprobedCodex?.status, "error");
             assert.strictEqual(reprobedCodex?.installed, false);
           }).pipe(Effect.provide(runtimeServices));
@@ -1741,6 +1747,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                 "codex",
                 "cursor",
                 "grok",
+                "jcode",
+                "kimi",
                 "opencode",
               ]);
               assert.strictEqual(cursorProvider?.enabled, false);

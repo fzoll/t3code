@@ -1277,9 +1277,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             yield* Effect.logInfo("Drain complete — all sessions finished.");
             return;
           }
-          yield* Effect.logInfo(
-            `Drain: ${running.length} session(s) still running. Waiting...`,
-          );
+          yield* Effect.logInfo(`Drain: ${running.length} session(s) still running. Waiting...`);
           yield* Effect.sleep(pollIntervalMs);
         }
         yield* Effect.logWarning("Drain timeout reached — forcing shutdown with active sessions.");

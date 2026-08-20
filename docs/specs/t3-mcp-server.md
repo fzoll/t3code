@@ -18,6 +18,7 @@ Agent (Claude Code / CC Runner)
 ```
 
 Two transport options:
+
 1. **stdio bridge** — `t3-mcp-bridge --host hermes.local:3773 --token <bearer>` — local process, agent adds to `.mcp.json`
 2. **SSE endpoint** — T3 server exposes `/mcp/external/sse` — agent connects directly (needs auth token)
 
@@ -28,11 +29,13 @@ Auth: bearer token from existing T3 pairing system (`/api/auth/browser-session` 
 ### Read-only (orchestration:read scope)
 
 #### `t3.server.health`
+
 Server health snapshot.
 
 **Input:** `{}`
 
 **Output:**
+
 ```json
 {
   "nodeId": "rpi5",
@@ -48,11 +51,13 @@ Server health snapshot.
 ```
 
 #### `t3.providers.list`
+
 List configured providers with status and available models.
 
 **Input:** `{}`
 
 **Output:**
+
 ```json
 [
   {
@@ -75,9 +80,11 @@ List configured providers with status and available models.
 ```
 
 #### `t3.threads.list`
+
 List threads with status, provider, model, timing.
 
 **Input:**
+
 ```json
 {
   "filter": "active" | "recent" | "all",
@@ -86,6 +93,7 @@ List threads with status, provider, model, timing.
 ```
 
 **Output:**
+
 ```json
 [
   {
@@ -107,11 +115,13 @@ List threads with status, provider, model, timing.
 ```
 
 #### `t3.thread.detail`
+
 Detailed thread state including turn history, pending approvals, diff summary.
 
 **Input:** `{ "threadId": "0940cbd8-..." }`
 
 **Output:**
+
 ```json
 {
   "threadId": "0940cbd8-...",
@@ -134,9 +144,11 @@ Detailed thread state including turn history, pending approvals, diff summary.
 ```
 
 #### `t3.server.logs`
+
 Recent server log entries, optionally filtered.
 
 **Input:**
+
 ```json
 {
   "lines": 50,
@@ -146,6 +158,7 @@ Recent server log entries, optionally filtered.
 ```
 
 **Output:**
+
 ```json
 {
   "entries": [
@@ -161,11 +174,13 @@ Recent server log entries, optionally filtered.
 ```
 
 #### `t3.server.diagnostics`
+
 Process tree, resource usage, active sessions per provider.
 
 **Input:** `{}`
 
 **Output:**
+
 ```json
 {
   "processes": [
@@ -192,11 +207,13 @@ Process tree, resource usage, active sessions per provider.
 ```
 
 #### `t3.migrations.status`
+
 Database migration state — useful for post-rebase debugging.
 
 **Input:** `{}`
 
 **Output:**
+
 ```json
 {
   "latestMigrationId": 39,
@@ -211,31 +228,37 @@ Database migration state — useful for post-rebase debugging.
 ### Write tools (orchestration:operate scope)
 
 #### `t3.thread.interrupt`
+
 Interrupt a running turn.
 
 **Input:** `{ "threadId": "...", "turnId": "..." }`
 
 #### `t3.thread.stop`
+
 Stop a provider session for a thread.
 
 **Input:** `{ "threadId": "..." }`
 
 #### `t3.server.drain`
+
 Enter drain mode — stop accepting new sessions, wait for active ones to finish.
 
 **Input:** `{ "timeoutMs": 7200000 }`
 
 #### `t3.providers.refresh`
+
 Force refresh provider status (re-probe CLI versions, re-discover models).
 
 **Input:** `{ "instanceId": "jcode" }` (optional, omit for all)
 
 #### `t3.vcs.pruneWorktrees`
+
 Run `git worktree prune` in a project directory.
 
 **Input:** `{ "cwd": "/path/to/project" }`
 
 #### `t3.vcs.deleteBranch`
+
 Delete a git branch.
 
 **Input:** `{ "cwd": "/path/to/project", "branch": "agent/issue-123", "force": true }`
@@ -243,17 +266,21 @@ Delete a git branch.
 ## Resources (MCP resources, read-only)
 
 ### `t3://server/config`
+
 Current ServerConfig (providers, settings, keybindings).
 
 ### `t3://threads/{threadId}/diff`
+
 Full diff for a thread (all changed files across all turns).
 
 ### `t3://threads/{threadId}/messages`
+
 Conversation messages for a thread.
 
 ## Implementation Plan
 
 ### Phase 1: Core read-only tools (MVP)
+
 - `t3.server.health`
 - `t3.providers.list`
 - `t3.threads.list`
@@ -263,12 +290,14 @@ Conversation messages for a thread.
 
 **Effort:** ~2 days
 **Files:**
+
 - `apps/server/src/mcp/external/ExternalMcpServer.ts` — tool handlers
 - `apps/server/src/mcp/external/ExternalMcpHttpEndpoint.ts` — SSE transport
 - `packages/t3-mcp-bridge/src/main.ts` — stdio bridge CLI
 - `packages/contracts/src/environmentHttp.ts` — new HTTP API group
 
 ### Phase 2: Thread detail + write tools
+
 - `t3.thread.detail`
 - `t3.thread.interrupt`
 - `t3.thread.stop`
@@ -277,6 +306,7 @@ Conversation messages for a thread.
 **Effort:** ~1 day
 
 ### Phase 3: VCS + diagnostics + resources
+
 - `t3.vcs.pruneWorktrees` / `t3.vcs.deleteBranch`
 - `t3.server.diagnostics`
 - `t3.migrations.status`
@@ -287,6 +317,7 @@ Conversation messages for a thread.
 ## Agent Configuration
 
 ### Claude Code `.mcp.json`
+
 ```json
 {
   "mcpServers": {
@@ -303,7 +334,9 @@ Conversation messages for a thread.
 ```
 
 ### CC Runner integration
+
 The cc_runner can use the MCP tools to:
+
 1. Check thread status before relaunch (`t3.threads.list`)
 2. Clean up stale worktrees/branches before session start (`t3.vcs.pruneWorktrees`, `t3.vcs.deleteBranch`)
 3. Monitor session health during long runs (`t3.thread.detail`)

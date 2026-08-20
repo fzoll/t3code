@@ -14,6 +14,8 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeOS from "node:os";
 
 import * as ServerConfig from "../../config.ts";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+
 import { availableMemoryMb } from "../../diagnostics/availableMemory.ts";
 import * as ProcessDiagnostics from "../../diagnostics/ProcessDiagnostics.ts";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
@@ -59,6 +61,7 @@ const handlers = {
       const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
       const providerService = yield* ProviderService;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
+      const hostPlatform = yield* HostProcessPlatform;
       const descriptor = yield* serverEnvironment.getDescriptor.pipe(
         Effect.mapError(internalError("descriptor_failed")),
       );
@@ -81,7 +84,7 @@ const handlers = {
         platform: { os: descriptor.platform.os, arch: descriptor.platform.arch },
         uptimeSeconds: Math.floor(process.uptime()),
         memory: {
-          freeMb: availableMemoryMb(),
+          freeMb: availableMemoryMb(hostPlatform),
           totalMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
         },
         sessions: sessionPids.map((session) => ({
