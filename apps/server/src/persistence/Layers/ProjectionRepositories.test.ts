@@ -33,6 +33,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
           instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5.4",
         },
+        defaultThreadEnvMode: null,
         scripts: [],
         environment: [],
         isAuto: 0,
