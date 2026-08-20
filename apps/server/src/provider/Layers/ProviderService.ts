@@ -26,6 +26,7 @@ import {
 } from "@t3tools/contracts";
 import { causeErrorTag } from "@t3tools/shared/observability";
 import * as DateTime from "effect/DateTime";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -1191,9 +1192,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         yield* Effect.logInfo(
           `Graceful shutdown: waiting for ${running.length} active session(s) to finish...`,
         );
-        const deadline = Date.now() + 2 * 60 * 60 * 1000;
+        const deadline = (yield* Clock.currentTimeMillis) + 2 * 60 * 60 * 1000;
         let remaining = running.length;
-        while (remaining > 0 && Date.now() < deadline) {
+        while (remaining > 0 && (yield* Clock.currentTimeMillis) < deadline) {
           yield* Effect.sleep(5_000);
           const adapters = yield* getAdapterEntries;
           const sessions = yield* Effect.forEach(adapters, ([, adapter]) =>
@@ -1263,8 +1264,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         yield* Effect.logInfo("Provider service entering drain mode — no new sessions accepted.");
         const timeoutMs = options?.timeoutMs ?? 2 * 60 * 60 * 1000;
         const pollIntervalMs = 5_000;
-        const deadline = Date.now() + timeoutMs;
-        while (Date.now() < deadline) {
+        const deadline = (yield* Clock.currentTimeMillis) + timeoutMs;
+        while ((yield* Clock.currentTimeMillis) < deadline) {
           const currentAdapters = yield* getAdapterEntries;
           const allSessions = yield* Effect.forEach(currentAdapters, ([, adapter]) =>
             adapter.listSessions(),

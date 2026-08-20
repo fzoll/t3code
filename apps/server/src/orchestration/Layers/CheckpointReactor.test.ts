@@ -124,6 +124,9 @@ function createProviderServiceHarness(
           continuationKey: `${providerName}:instance:${instanceId}`,
         },
       }),
+    getSessionPids: () => Effect.succeed([]),
+    drain: () => Effect.void,
+    isDraining: Effect.succeed(false),
     rollbackConversation,
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);

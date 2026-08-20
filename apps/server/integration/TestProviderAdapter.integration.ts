@@ -494,6 +494,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
       hasSession,
       readThread,
       rollbackThread,
+      getSessionPid: () => Effect.succeed(null),
       stopAll,
       streamEvents: Stream.fromQueue(runtimeEvents),
     };

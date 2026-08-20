@@ -3161,6 +3161,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                   activeRouteThreadKey={
                     activeRouteProjectKey === project.projectKey ? routeThreadKey : null
                   }
+                  openPullRequestsInRightPanel={openPullRequestsInRightPanel}
                   newThreadShortcutLabel={newThreadShortcutLabel}
                   handleNewThread={handleNewThread}
                   archiveThread={archiveThread}

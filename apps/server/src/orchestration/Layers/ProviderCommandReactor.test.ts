@@ -339,6 +339,9 @@ describe("ProviderCommandReactor", () => {
           },
         });
       },
+      getSessionPids: () => Effect.succeed([]),
+      drain: () => Effect.void,
+      isDraining: Effect.succeed(false),
       rollbackConversation: () => unsupported(),
       get streamEvents() {
         return Stream.fromPubSub(runtimeEventPubSub);

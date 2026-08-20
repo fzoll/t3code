@@ -40,6 +40,7 @@ const fakeCodexAdapter: CodexAdapter.CodexAdapterShape = {
   hasSession: vi.fn(),
   readThread: vi.fn(),
   rollbackThread: vi.fn(),
+  getSessionPid: vi.fn(),
   stopAll: vi.fn(),
   streamEvents: Stream.empty,
 };
@@ -57,6 +58,7 @@ const fakeClaudeAdapter: ClaudeAdapter.ClaudeAdapterShape = {
   hasSession: vi.fn(),
   readThread: vi.fn(),
   rollbackThread: vi.fn(),
+  getSessionPid: vi.fn(),
   stopAll: vi.fn(),
   streamEvents: Stream.empty,
 };
@@ -74,6 +76,7 @@ const fakeOpenCodeAdapter: OpenCodeAdapter.OpenCodeAdapterShape = {
   hasSession: vi.fn(),
   readThread: vi.fn(),
   rollbackThread: vi.fn(),
+  getSessionPid: vi.fn(),
   stopAll: vi.fn(),
   streamEvents: Stream.empty,
 };
@@ -91,6 +94,7 @@ const fakeCursorAdapter: CursorAdapter.CursorAdapterShape = {
   hasSession: vi.fn(),
   readThread: vi.fn(),
   rollbackThread: vi.fn(),
+  getSessionPid: vi.fn(),
   stopAll: vi.fn(),
   streamEvents: Stream.empty,
 };

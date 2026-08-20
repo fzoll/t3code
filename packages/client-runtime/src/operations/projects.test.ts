@@ -189,6 +189,9 @@ describe("add project shared logic", () => {
         repositoryIdentity: null,
         defaultModelSelection: null,
         scripts: [],
+        environment: [],
+        isAuto: false,
+        group: null,
       },
       {
         environmentId: env,
@@ -200,6 +203,9 @@ describe("add project shared logic", () => {
         repositoryIdentity: null,
         defaultModelSelection: null,
         scripts: [],
+        environment: [],
+        isAuto: false,
+        group: null,
       },
     ];
 

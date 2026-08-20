@@ -156,6 +156,10 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
 
   close = Effect.promise(() => this.closeImpl());
 
+  // Fake runtime never spawns a child process; the adapter only reads this to
+  // report session PIDs.
+  pid = 0;
+
   emit(event: ProviderEvent) {
     return Queue.offer(this.eventQueue, event).pipe(Effect.asVoid);
   }

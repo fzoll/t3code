@@ -219,6 +219,7 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
     hasSession,
     readThread,
     rollbackThread,
+    getSessionPid: () => Effect.succeed(null),
     stopAll,
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);
