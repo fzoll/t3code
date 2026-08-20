@@ -1482,10 +1482,18 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
           const spawnedCommands: Array<string> = [];
           // Other provider instances (jcode, kimi) probe their own binaries on
           // the same boot; this assertion is about the codex executable only.
-          const codexSpawns = () =>
-            spawnedCommands.filter(
-              (command) => command === firstMissing || command === secondMissing,
-            );
+          // Deduplicated, in first-seen order: the point is *which* executable
+          // has been probed by now, not how many times. A periodic background
+          // refresh can land inside the poll loop below and probe the same
+          // path again, which is normal registry behaviour, not a regression.
+          const codexSpawns = () => {
+            const seen: string[] = [];
+            for (const command of spawnedCommands) {
+              if (command !== firstMissing && command !== secondMissing) continue;
+              if (!seen.includes(command)) seen.push(command);
+            }
+            return seen;
+          };
           const serverSettings = yield* makeMutableServerSettingsService(
             decodeServerSettings(
               deepMerge(encodedDefaultServerSettings, {
