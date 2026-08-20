@@ -16,6 +16,7 @@ import type {
   ContextMenuItem,
   ModelSelection,
   ProviderDriverKind,
+  ProviderInstanceEnvironmentVariable,
   SidebarProjectGroupingMode,
   T3ProjectFileScript,
   ThreadEnvMode,
@@ -34,6 +35,9 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+
+import { EnvironmentVariableEditor } from "../EnvironmentVariableEditor";
+import { Switch } from "../ui/switch";
 
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { isElectron } from "../../env";
@@ -349,6 +353,9 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
         defaultModelSelection: ModelSelection | null;
         defaultThreadEnvMode: ThreadEnvMode | null;
         faviconPath: string | null;
+        environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>;
+        isAuto: boolean;
+        group: string | null;
       }>,
       failureTitle: string,
     ): Promise<AtomCommandResult<void, unknown>> => {
@@ -442,6 +449,52 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
       }
     },
     [updateAllMembers],
+  );
+
+  // ----- fork fields: environment variables, automation, sidebar group -----
+  // All three are group-shared: every checkout of the same repository runs
+  // under the same GitHub account, automation flag, and sidebar category.
+  const projectEnvironmentVariables = representative.environment ?? [];
+  const environmentValuesRef = useRef<() => ReadonlyArray<ProviderInstanceEnvironmentVariable>>(
+    () => projectEnvironmentVariables,
+  );
+  const [isSavingEnvironment, setIsSavingEnvironment] = useState(false);
+  const savingEnvironmentRef = useRef(false);
+
+  const saveEnvironment = useCallback(async () => {
+    if (savingEnvironmentRef.current) return;
+    savingEnvironmentRef.current = true;
+    setIsSavingEnvironment(true);
+    try {
+      const result = await updateAllMembers(
+        { environment: environmentValuesRef.current() },
+        "Failed to save environment variables",
+      );
+      if (result._tag !== "Failure") {
+        toastManager.add({ type: "success", title: "Environment variables saved" });
+      }
+    } finally {
+      savingEnvironmentRef.current = false;
+      setIsSavingEnvironment(false);
+    }
+  }, [updateAllMembers]);
+
+  const setIsAuto = useCallback(
+    async (isAuto: boolean) => {
+      await updateAllMembers({ isAuto }, "Failed to update automation setting");
+    },
+    [updateAllMembers],
+  );
+
+  const setSidebarGroup = useCallback(
+    async (nextGroup: string) => {
+      const trimmed = nextGroup.trim();
+      const current = representative.group ?? null;
+      const next = trimmed.length > 0 ? trimmed : null;
+      if (next === current) return;
+      await updateAllMembers({ group: next }, "Failed to update project group");
+    },
+    [representative.group, updateAllMembers],
   );
 
   // ----- checkout selection and scripts -----
@@ -794,6 +847,61 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
               </div>
             }
           />
+          <SettingsRow
+            title="Sidebar group"
+            description="Free-text category for this project. Projects sharing a group name are grouped together in the sidebar; use / for nesting, e.g. work/clients. Unrelated to the Checkout grouping rule below, which decides how checkouts of one repository merge."
+            control={
+              <Input
+                key={`${group.projectKey}:group:${representative.group ?? ""}`}
+                className="w-full sm:w-64"
+                aria-label="Sidebar group"
+                placeholder="e.g. work, personal, automation"
+                defaultValue={representative.group ?? ""}
+                onBlur={(event) => {
+                  void setSidebarGroup(event.currentTarget.value);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+              />
+            }
+          />
+          <SettingsRow
+            title="Automated project"
+            description="Threads here never raise unread notifications or the Completed status pill. Use it for cc_runner sessions that run unattended."
+            control={
+              <Switch
+                checked={representative.isAuto ?? false}
+                onCheckedChange={(checked) => void setIsAuto(Boolean(checked))}
+                aria-label="Automated project"
+              />
+            }
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Environment variables">
+          <SettingsRow
+            title="Injected into provider sessions"
+            description="Variables like GH_TOKEN, GIT_AUTHOR_NAME, or GIT_AUTHOR_EMAIL are passed to every agent session started in this project. Set GH_TOKEN and the matching git identity together — a token from one account with another account's email commits under the wrong author."
+            control={
+              <Button
+                size="xs"
+                variant="outline"
+                type="button"
+                disabled={isSavingEnvironment}
+                onClick={() => void saveEnvironment()}
+              >
+                {isSavingEnvironment ? "Saving..." : "Save"}
+              </Button>
+            }
+          >
+            <EnvironmentVariableEditor
+              key={`${group.projectKey}:environment`}
+              environment={projectEnvironmentVariables}
+              onChange={() => {}}
+              getValuesRef={environmentValuesRef}
+            />
+          </SettingsRow>
         </SettingsSection>
 
         <SettingsSection title="New threads">

@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { useThreadShells } from "../state/entities";
+import { useEffect, useMemo, useRef } from "react";
+import { useProjects, useThreadShells } from "../state/entities";
 import { isElectron } from "../env";
 
 /**
@@ -7,16 +7,32 @@ import { isElectron } from "../env";
  * needs user attention (pending approval or user-input request).
  * Only active inside Electron — browsers require explicit permission
  * and we don't want to prompt for it in the hosted web client.
+ *
+ * Projects flagged as automated are skipped: an unattended cc_runner
+ * session asking for approval is the normal course of business there, not
+ * something to interrupt the user for.
  */
 export function useDesktopNotifications(): void {
   const threads = useThreadShells();
+  const projects = useProjects();
   const prevAttentionIds = useRef(new Set<string>());
+
+  const autoProjectKeys = useMemo(
+    () =>
+      new Set(
+        projects
+          .filter((project) => project.isAuto === true)
+          .map((project) => `${project.environmentId}:${project.id}`),
+      ),
+    [projects],
+  );
 
   useEffect(() => {
     if (!isElectron) return;
 
     const currentAttentionIds = new Set<string>();
     for (const thread of threads) {
+      if (autoProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)) continue;
       if (thread.hasPendingApprovals || thread.hasPendingUserInput) {
         currentAttentionIds.add(thread.id);
       }
@@ -33,5 +49,5 @@ export function useDesktopNotifications(): void {
     }
 
     prevAttentionIds.current = currentAttentionIds;
-  }, [threads]);
+  }, [autoProjectKeys, threads]);
 }
