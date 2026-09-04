@@ -931,6 +931,8 @@ describe("per-repo worktree provisioning lock", () => {
 
       const activeByRepo = new Map<string, number>();
       const maxActiveByRepo = new Map<string, number>();
+      let globalActive = 0;
+      let globalMaxActive = 0;
 
       const wrapperSpawnerLayer = Layer.effect(
         ChildProcessSpawner.ChildProcessSpawner,
@@ -945,6 +947,8 @@ describe("per-repo worktree provisioning lock", () => {
               const count = (activeByRepo.get(repoKey) ?? 0) + 1;
               activeByRepo.set(repoKey, count);
               maxActiveByRepo.set(repoKey, Math.max(maxActiveByRepo.get(repoKey) ?? 0, count));
+              globalActive += 1;
+              globalMaxActive = Math.max(globalMaxActive, globalActive);
 
               const handle = yield* real.spawn(command);
               return ChildProcessSpawner.makeHandle({
@@ -954,6 +958,7 @@ describe("per-repo worktree provisioning lock", () => {
                   Effect.tap(() =>
                     Effect.sync(() => {
                       activeByRepo.set(repoKey, (activeByRepo.get(repoKey) ?? 1) - 1);
+                      globalActive -= 1;
                     }),
                   ),
                 ),
@@ -1025,6 +1030,11 @@ describe("per-repo worktree provisioning lock", () => {
           maxActiveByRepo.get(repoB) ?? 0,
           1,
           "a single repo never exceeds one in-flight guarded git command",
+        );
+        assert.equal(
+          globalMaxActive,
+          2,
+          "different repos must still provision concurrently, not serialize behind one global lock",
         );
       }).pipe(Effect.provide(layer));
     },
