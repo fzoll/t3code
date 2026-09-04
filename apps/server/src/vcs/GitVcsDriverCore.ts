@@ -960,6 +960,31 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     return path.isAbsolute(gitCommonDir) ? gitCommonDir : path.resolve(cwd, gitCommonDir);
   });
 
+  // Serializes worktree-provisioning git sequences (fetch + resolveRemoteTrackingCommit +
+  // worktree add) per repo, keyed by gitCommonDir. Without this, a `git fetch` writing
+  // refs/remotes/* on one thread can race with `git rev-parse --verify refs/remotes/...` on
+  // another thread of the same clone, failing with "fatal: Needed a single revision". Distinct
+  // repos never share a lock, so unrelated clones keep provisioning in parallel.
+  const repoGitLocks = yield* Ref.make(new Map<string, Semaphore.Semaphore>());
+  const acquireRepoGitLock = (gitCommonDir: string) =>
+    Effect.gen(function* () {
+      const existing = (yield* Ref.get(repoGitLocks)).get(gitCommonDir);
+      if (existing) return existing;
+      const created = yield* Semaphore.make(1);
+      return yield* Ref.modify(repoGitLocks, (current) => {
+        const already = current.get(gitCommonDir);
+        if (already) return [already, current];
+        const next = new Map(current);
+        next.set(gitCommonDir, created);
+        return [created, next];
+      });
+    });
+  const withRepoGitLock = <A, E>(cwd: string, effect: Effect.Effect<A, E>) =>
+    resolveGitCommonDir(cwd).pipe(
+      Effect.flatMap((gitCommonDir) => acquireRepoGitLock(gitCommonDir)),
+      Effect.flatMap((lock) => lock.withPermit(effect)),
+    );
+
   const refreshStatusRemoteCacheEntry = Effect.fn("refreshStatusRemoteCacheEntry")(function* (
     cacheKey: StatusRemoteRefreshCacheKey,
   ) {
@@ -2268,9 +2293,12 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       ? ["worktree", "add", "-b", input.newRefName, worktreePath, input.refName]
       : ["worktree", "add", worktreePath, input.refName];
 
-    yield* executeGit("GitVcsDriver.createWorktree", input.cwd, args, {
-      fallbackErrorDetail: "git worktree add failed",
-    });
+    yield* withRepoGitLock(
+      input.cwd,
+      executeGit("GitVcsDriver.createWorktree", input.cwd, args, {
+        fallbackErrorDetail: "git worktree add failed",
+      }),
+    );
 
     if (input.newRefName && input.baseRefName) {
       const remoteNames = yield* listRemoteNames(input.cwd).pipe(Effect.orElseSucceed(() => []));
@@ -2315,14 +2343,12 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
 
   const fetchRemote: GitVcsDriver.GitVcsDriver["Service"]["fetchRemote"] = Effect.fn("fetchRemote")(
     function* (input) {
-      yield* executeGit(
-        "GitVcsDriver.fetchRemote",
+      yield* withRepoGitLock(
         input.cwd,
-        ["fetch", "--quiet", input.remoteName],
-        {
+        executeGit("GitVcsDriver.fetchRemote", input.cwd, ["fetch", "--quiet", input.remoteName], {
           env: STATUS_UPSTREAM_REFRESH_ENV,
           fallbackErrorDetail: `git fetch ${input.remoteName} failed`,
-        },
+        }),
       );
     },
   );
@@ -2336,11 +2362,14 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       );
       const remoteRefName =
         parsedRemoteRef?.remoteRef ?? `${input.fallbackRemoteName}/${input.refName}`;
-      const commitSha = yield* runGitStdout("GitVcsDriver.resolveRemoteTrackingCommit", input.cwd, [
-        "rev-parse",
-        "--verify",
-        `refs/remotes/${remoteRefName}^{commit}`,
-      ]).pipe(Effect.map((stdout) => stdout.trim()));
+      const commitSha = yield* withRepoGitLock(
+        input.cwd,
+        runGitStdout("GitVcsDriver.resolveRemoteTrackingCommit", input.cwd, [
+          "rev-parse",
+          "--verify",
+          `refs/remotes/${remoteRefName}^{commit}`,
+        ]).pipe(Effect.map((stdout) => stdout.trim())),
+      );
 
       return { commitSha, remoteRefName };
     });
