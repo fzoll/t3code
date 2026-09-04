@@ -899,3 +899,135 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
     );
   });
 });
+
+// Real (non-virtual) delay: `it.effect` runs under Effect's TestClock, so `Effect.sleep` never
+// resolves there unless the virtual clock is advanced. This waits on the actual Node event loop
+// so an artificially widened "in-flight" window (see below) really elapses in wall-clock time.
+// Effect.sleep runs on the virtual TestClock under `it.effect` and never resolves here; this
+// intentionally bypasses it for a real wall-clock wait.
+const realDelay = (ms: number): Effect.Effect<void> =>
+  Effect.promise(
+    () =>
+      new Promise((resolve) => {
+        // @effect-diagnostics-next-line globalTimers:off
+        setTimeout(resolve, ms);
+      }),
+  );
+
+describe("per-repo worktree provisioning lock", () => {
+  it.effect(
+    "serializes fetch + resolveRemoteTrackingCommit + worktree add for the same repo, but not across repos",
+    () => {
+      // Tags the git subprocesses that GitVcsDriverCore serializes per repo (fetch,
+      // `rev-parse --verify refs/remotes/...`, `worktree add`) and records, per cwd, the maximum
+      // number of those subprocesses ever observed running at the same time. Each tagged
+      // subprocess is held "active" a little past its real completion so overlapping calls have a
+      // real chance to race if the per-repo lock were missing. Plain (non-Effect) state is safe
+      // here: every read-modify-write below runs synchronously between yield points.
+      const isGuardedCommand = (args: ReadonlyArray<string>): boolean =>
+        args[0] === "fetch" ||
+        (args[0] === "rev-parse" && args.includes("--verify")) ||
+        (args[0] === "worktree" && args[1] === "add");
+
+      const activeByRepo = new Map<string, number>();
+      const maxActiveByRepo = new Map<string, number>();
+
+      const wrapperSpawnerLayer = Layer.effect(
+        ChildProcessSpawner.ChildProcessSpawner,
+        Effect.gen(function* () {
+          const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+          return ChildProcessSpawner.make((command) =>
+            Effect.gen(function* () {
+              if (!ChildProcess.isStandardCommand(command) || !isGuardedCommand(command.args)) {
+                return yield* real.spawn(command);
+              }
+              const repoKey = command.options.cwd ?? "";
+              const count = (activeByRepo.get(repoKey) ?? 0) + 1;
+              activeByRepo.set(repoKey, count);
+              maxActiveByRepo.set(repoKey, Math.max(maxActiveByRepo.get(repoKey) ?? 0, count));
+
+              const handle = yield* real.spawn(command);
+              return ChildProcessSpawner.makeHandle({
+                ...handle,
+                exitCode: handle.exitCode.pipe(
+                  Effect.tap(() => realDelay(120)),
+                  Effect.tap(() =>
+                    Effect.sync(() => {
+                      activeByRepo.set(repoKey, (activeByRepo.get(repoKey) ?? 1) - 1);
+                    }),
+                  ),
+                ),
+              });
+            }),
+          );
+        }),
+      ).pipe(Layer.provide(NodeServices.layer));
+
+      const layer = GitVcsDriver.layer.pipe(
+        Layer.provide(ServerConfigLayer),
+        Layer.provide(wrapperSpawnerLayer),
+        Layer.provideMerge(NodeServices.layer),
+      );
+
+      const setupRepoWithRemote = (label: string) =>
+        Effect.gen(function* () {
+          const cwd = yield* makeTmpDir(`git-lock-${label}-`);
+          const remote = yield* makeTmpDir(`git-lock-${label}-remote-`);
+          const peer = yield* makeTmpDir(`git-lock-${label}-peer-`);
+          const { initialBranch } = yield* initRepoWithCommit(cwd);
+          yield* git(remote, ["init", "--bare"]);
+          yield* git(cwd, ["remote", "add", "origin", remote]);
+          yield* git(cwd, ["push", "-u", "origin", initialBranch]);
+          yield* git(remote, ["symbolic-ref", "HEAD", `refs/heads/${initialBranch}`]);
+
+          yield* git(peer, ["clone", remote, "."]);
+          yield* git(peer, ["config", "user.email", "test@test.com"]);
+          yield* git(peer, ["config", "user.name", "Test"]);
+          yield* writeTextFile(peer, "remote-change.txt", `${label}\n`);
+          yield* git(peer, ["add", "remote-change.txt"]);
+          yield* git(peer, ["commit", "-m", "remote change"]);
+          yield* git(peer, ["push", "origin", initialBranch]);
+
+          const driver = yield* GitVcsDriver.GitVcsDriver;
+          // Establish refs/remotes/origin/<branch> once up front so the concurrent
+          // resolveRemoteTrackingCommit call below has something to resolve.
+          yield* driver.fetchRemote({ cwd, remoteName: "origin" });
+
+          return { cwd, initialBranch };
+        });
+
+      return Effect.gen(function* () {
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        const { cwd: repoA, initialBranch: branchA } = yield* setupRepoWithRemote("a");
+        const { cwd: repoB } = yield* setupRepoWithRemote("b");
+
+        const repoATasks = Effect.all(
+          [
+            driver.fetchRemote({ cwd: repoA, remoteName: "origin" }),
+            driver.resolveRemoteTrackingCommit({
+              cwd: repoA,
+              refName: branchA,
+              fallbackRemoteName: "origin",
+            }),
+          ],
+          { concurrency: "unbounded" },
+        );
+        const repoBTask = driver.fetchRemote({ cwd: repoB, remoteName: "origin" });
+
+        yield* Effect.all([repoATasks, repoBTask], { concurrency: "unbounded" });
+
+        assert.equal(
+          maxActiveByRepo.get(repoA) ?? 0,
+          1,
+          "fetch and resolveRemoteTrackingCommit must never run concurrently for the same repo",
+        );
+        assert.equal(
+          maxActiveByRepo.get(repoB) ?? 0,
+          1,
+          "a single repo never exceeds one in-flight guarded git command",
+        );
+      }).pipe(Effect.provide(layer));
+    },
+    20000,
+  );
+});
