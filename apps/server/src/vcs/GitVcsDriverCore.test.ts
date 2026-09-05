@@ -785,6 +785,48 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect(
+      "resolves the same remote base ref from many concurrent fetch + resolveRemoteTrackingCommit dispatches",
+      () =>
+        Effect.gen(function* () {
+          const cwd = yield* makeTmpDir();
+          const remote = yield* makeTmpDir("git-remote-");
+          const { initialBranch } = yield* initRepoWithCommit(cwd);
+          yield* git(remote, ["init", "--bare"]);
+          yield* git(cwd, ["remote", "add", "origin", remote]);
+          yield* git(cwd, ["push", "-u", "origin", initialBranch]);
+          const remoteHead = yield* git(remote, ["rev-parse", initialBranch]);
+
+          const driver = yield* GitVcsDriver.GitVcsDriver;
+
+          // Reproduces concurrent worktree-provisioning dispatches sharing one clone: without a
+          // per-repo lock around fetch + resolveRemoteTrackingCommit, interleaved `git fetch`
+          // rewrites of refs/remotes/* could crash a concurrent rev-parse with "fatal: Needed a
+          // single revision".
+          const dispatchBaseRefResolution = driver.fetchRemote({ cwd, remoteName: "origin" }).pipe(
+            Effect.andThen(
+              driver.resolveRemoteTrackingCommit({
+                cwd,
+                refName: initialBranch,
+                fallbackRemoteName: "origin",
+              }),
+            ),
+          );
+
+          const results = yield* Effect.all(
+            Array.from({ length: 8 }, () => dispatchBaseRefResolution),
+            { concurrency: "unbounded" },
+          );
+
+          for (const result of results) {
+            assert.deepEqual(result, {
+              commitSha: remoteHead,
+              remoteRefName: `origin/${initialBranch}`,
+            });
+          }
+        }),
+    );
+
     it.effect("pushes with upstream setup and skips when already up to date", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();
