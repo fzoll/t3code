@@ -152,27 +152,31 @@ it.layer(ScriptTestLayer)("update-release-package-versions", (it) => {
     }),
   );
 
-  it.effect("preserves manifest write context and the filesystem cause", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const baseDir = yield* fs.makeTempDirectoryScoped({
-        prefix: "update-release-package-versions-write-error-",
-      });
-      const filePath = path.join(baseDir, releasePackageFiles[0]);
+  // Root bypasses the DAC permission bits this test relies on to force a write
+  // failure, so it can't observe the intended error under a root-run sandbox/CI.
+  it.effect.skipIf(process.getuid?.() === 0)(
+    "preserves manifest write context and the filesystem cause",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const baseDir = yield* fs.makeTempDirectoryScoped({
+          prefix: "update-release-package-versions-write-error-",
+        });
+        const filePath = path.join(baseDir, releasePackageFiles[0]);
 
-      yield* writePackageJsonFixtures(baseDir, "0.0.1");
-      yield* fs.chmod(filePath, 0o400);
+        yield* writePackageJsonFixtures(baseDir, "0.0.1");
+        yield* fs.chmod(filePath, 0o400);
 
-      const error = yield* updateReleasePackageVersions("1.2.3", {
-        rootDir: baseDir,
-      }).pipe(Effect.flip, Effect.ensuring(fs.chmod(filePath, 0o600).pipe(Effect.orDie)));
+        const error = yield* updateReleasePackageVersions("1.2.3", {
+          rootDir: baseDir,
+        }).pipe(Effect.flip, Effect.ensuring(fs.chmod(filePath, 0o600).pipe(Effect.orDie)));
 
-      assert.equal(error.operation, "write");
-      assert.equal(error.filePath, filePath);
-      assert.instanceOf(error.cause, PlatformError.PlatformError);
-      assert.equal(error.message, `Failed to write release package manifest '${filePath}'.`);
-    }),
+        assert.equal(error.operation, "write");
+        assert.equal(error.filePath, filePath);
+        assert.instanceOf(error.cause, PlatformError.PlatformError);
+        assert.equal(error.message, `Failed to write release package manifest '${filePath}'.`);
+      }),
   );
 
   it.effect("accepts flags before the version positional and appends changed output", () =>
