@@ -2282,6 +2282,60 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     },
   );
 
+  // Reclaims a worktree directory left behind at `worktreePath` by an attempt that
+  // was never cleaned up (e.g. a bootstrap that failed after `worktree add` but
+  // before the thread finished starting). Without this, retrying the same
+  // branch/path fails forever with "fatal: '<path>' already exists". Only ever
+  // touches the exact path we are about to write to, so it can't clobber an
+  // unrelated worktree.
+  const reclaimStaleWorktreeAtPath = Effect.fn("reclaimStaleWorktreeAtPath")(function* (
+    cwd: string,
+    staleWorktreePath: string,
+  ) {
+    yield* executeGit("GitVcsDriver.createWorktree.prune", cwd, ["worktree", "prune"], {
+      allowNonZeroExit: true,
+    });
+
+    const worktreeList = yield* executeGit(
+      "GitVcsDriver.createWorktree.listForReclaim",
+      cwd,
+      ["worktree", "list", "--porcelain"],
+      { allowNonZeroExit: true },
+    );
+    const isRegistered =
+      worktreeList.exitCode === 0 &&
+      worktreeList.stdout
+        .split("\n")
+        .some(
+          (line) =>
+            line.startsWith("worktree ") && line.slice("worktree ".length) === staleWorktreePath,
+        );
+
+    if (isRegistered) {
+      const removed = yield* executeGit(
+        "GitVcsDriver.createWorktree.reclaim",
+        cwd,
+        ["worktree", "remove", "--force", staleWorktreePath],
+        { allowNonZeroExit: true },
+      );
+      return removed.exitCode === 0;
+    }
+
+    const stillExists = yield* fileSystem
+      .exists(staleWorktreePath)
+      .pipe(Effect.orElseSucceed(() => false));
+    if (!stillExists) {
+      return false;
+    }
+    yield* fileSystem
+      .remove(staleWorktreePath, { recursive: true, force: true })
+      .pipe(Effect.catch(() => Effect.void));
+    yield* executeGit("GitVcsDriver.createWorktree.pruneAfterReclaim", cwd, ["worktree", "prune"], {
+      allowNonZeroExit: true,
+    });
+    return true;
+  });
+
   const createWorktree: GitVcsDriver.GitVcsDriver["Service"]["createWorktree"] = Effect.fn(
     "createWorktree",
   )(function* (input) {
@@ -2289,15 +2343,27 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     const sanitizedBranch = targetBranch.replace(/\//g, "-");
     const repoName = path.basename(input.cwd);
     const worktreePath = input.path ?? path.join(worktreesDir, repoName, sanitizedBranch);
+    // `-B` (not `-b`) so retrying the same branch after an uncleaned attempt resets
+    // it in place instead of failing with "branch already exists". Git still refuses
+    // if the branch is checked out in another live worktree, so this can't clobber
+    // active work.
     const args = input.newRefName
-      ? ["worktree", "add", "-b", input.newRefName, worktreePath, input.refName]
+      ? ["worktree", "add", "-B", input.newRefName, worktreePath, input.refName]
       : ["worktree", "add", worktreePath, input.refName];
+
+    const addWorktree = executeGit("GitVcsDriver.createWorktree", input.cwd, args, {
+      fallbackErrorDetail: "git worktree add failed",
+    });
 
     yield* withRepoGitLock(
       input.cwd,
-      executeGit("GitVcsDriver.createWorktree", input.cwd, args, {
-        fallbackErrorDetail: "git worktree add failed",
-      }),
+      addWorktree.pipe(
+        Effect.catch((error) =>
+          reclaimStaleWorktreeAtPath(input.cwd, worktreePath).pipe(
+            Effect.flatMap((reclaimed) => (reclaimed ? addWorktree : Effect.fail(error))),
+          ),
+        ),
+      ),
     );
 
     if (input.newRefName && input.baseRefName) {
