@@ -2282,6 +2282,95 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     },
   );
 
+  function parseWorktreeListPorcelain(
+    stdout: string,
+  ): ReadonlyArray<{ path: string; branch: string | null }> {
+    const entries: Array<{ path: string; branch: string | null }> = [];
+    let current: { path: string; branch: string | null } | null = null;
+    for (const line of stdout.split("\n")) {
+      if (line.startsWith("worktree ")) {
+        current = { path: line.slice("worktree ".length), branch: null };
+        entries.push(current);
+      } else if (line.startsWith("branch refs/heads/") && current) {
+        current.branch = line.slice("branch ".length);
+      } else if (line === "") {
+        current = null;
+      }
+    }
+    return entries;
+  }
+
+  // Reclaims worktrees left behind by an attempt that was never cleaned up (e.g. a
+  // bootstrap that failed after `worktree add` but before the thread finished
+  // starting), so a retry of the same branch/path doesn't fail forever. Two cases:
+  //
+  // 1. A worktree is still registered at the exact `worktreePath` we're about to
+  //    write to ("fatal: '<path>' already exists").
+  // 2. `targetBranch` is registered at a *different* path ("fatal: '<branch>' is
+  //    already checked out at '<other-path>'"). This happens when the path a
+  //    previous attempt used doesn't match what this attempt just computed — e.g.
+  //    the default path is derived from a homedir-relative config directory, which
+  //    can resolve to a different location across hosts or after that config
+  //    changes, orphaning the earlier worktree under its old path.
+  //
+  // Only ever touches worktrees matching the exact path or the exact target
+  // branch, so it can't clobber an unrelated worktree.
+  const reclaimConflictingWorktrees = Effect.fn("reclaimConflictingWorktrees")(function* (
+    cwd: string,
+    worktreePath: string,
+    targetBranch: string,
+  ) {
+    yield* executeGit("GitVcsDriver.createWorktree.prune", cwd, ["worktree", "prune"], {
+      allowNonZeroExit: true,
+    });
+
+    const worktreeList = yield* executeGit(
+      "GitVcsDriver.createWorktree.listForReclaim",
+      cwd,
+      ["worktree", "list", "--porcelain"],
+      { allowNonZeroExit: true },
+    );
+    const registered =
+      worktreeList.exitCode === 0 ? parseWorktreeListPorcelain(worktreeList.stdout) : [];
+    const targetBranchRef = `refs/heads/${targetBranch}`;
+    const conflicting = registered.filter(
+      (entry) => entry.path === worktreePath || entry.branch === targetBranchRef,
+    );
+
+    let reclaimed = false;
+    for (const entry of conflicting) {
+      const removed = yield* executeGit(
+        "GitVcsDriver.createWorktree.reclaim",
+        cwd,
+        ["worktree", "remove", "--force", entry.path],
+        { allowNonZeroExit: true },
+      );
+      reclaimed = reclaimed || removed.exitCode === 0;
+    }
+
+    if (!conflicting.some((entry) => entry.path === worktreePath)) {
+      const stillExists = yield* fileSystem
+        .exists(worktreePath)
+        .pipe(Effect.orElseSucceed(() => false));
+      if (stillExists) {
+        yield* fileSystem
+          .remove(worktreePath, { recursive: true, force: true })
+          .pipe(Effect.catch(() => Effect.void));
+        reclaimed = true;
+      }
+    }
+
+    if (reclaimed) {
+      yield* executeGit(
+        "GitVcsDriver.createWorktree.pruneAfterReclaim",
+        cwd,
+        ["worktree", "prune"],
+        { allowNonZeroExit: true },
+      );
+    }
+    return reclaimed;
+  });
+
   const createWorktree: GitVcsDriver.GitVcsDriver["Service"]["createWorktree"] = Effect.fn(
     "createWorktree",
   )(function* (input) {
@@ -2289,15 +2378,27 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     const sanitizedBranch = targetBranch.replace(/\//g, "-");
     const repoName = path.basename(input.cwd);
     const worktreePath = input.path ?? path.join(worktreesDir, repoName, sanitizedBranch);
+    // `-B` (not `-b`) so retrying the same branch after an uncleaned attempt resets
+    // it in place instead of failing with "branch already exists". Git still refuses
+    // if the branch is checked out in another live worktree, so this can't clobber
+    // active work.
     const args = input.newRefName
-      ? ["worktree", "add", "-b", input.newRefName, worktreePath, input.refName]
+      ? ["worktree", "add", "-B", input.newRefName, worktreePath, input.refName]
       : ["worktree", "add", worktreePath, input.refName];
+
+    const addWorktree = executeGit("GitVcsDriver.createWorktree", input.cwd, args, {
+      fallbackErrorDetail: "git worktree add failed",
+    });
 
     yield* withRepoGitLock(
       input.cwd,
-      executeGit("GitVcsDriver.createWorktree", input.cwd, args, {
-        fallbackErrorDetail: "git worktree add failed",
-      }),
+      addWorktree.pipe(
+        Effect.catch((error) =>
+          reclaimConflictingWorktrees(input.cwd, worktreePath, targetBranch).pipe(
+            Effect.flatMap((reclaimed) => (reclaimed ? addWorktree : Effect.fail(error))),
+          ),
+        ),
+      ),
     );
 
     if (input.newRefName && input.baseRefName) {

@@ -668,6 +668,92 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         assert.equal(yield* fileSystem.exists(worktreePath), false);
       }),
     );
+
+    it.effect(
+      "reclaims a stale worktree left behind at the same path and branch by an uncleaned attempt",
+      () =>
+        Effect.gen(function* () {
+          const cwd = yield* makeTmpDir();
+          const { initialBranch } = yield* initRepoWithCommit(cwd);
+          const pathService = yield* Path.Path;
+          const worktreePath = pathService.join(
+            yield* makeTmpDir("git-worktrees-"),
+            "agent-issue-7",
+          );
+          const driver = yield* GitVcsDriver.GitVcsDriver;
+
+          // First attempt succeeds, but (as happens when a bootstrap fails
+          // partway through and cleanup never runs) the worktree is never removed.
+          yield* driver.createWorktree({
+            cwd,
+            path: worktreePath,
+            refName: initialBranch,
+            newRefName: "agent-issue-7",
+          });
+          yield* writeTextFile(worktreePath, "stray.txt", "leftover from failed attempt\n");
+
+          // Retrying with the exact same path and branch name must not fail with
+          // "already exists" — it should reclaim the stale worktree and succeed.
+          const retried = yield* driver.createWorktree({
+            cwd,
+            path: worktreePath,
+            refName: initialBranch,
+            newRefName: "agent-issue-7",
+          });
+
+          assert.equal(retried.worktree.path, worktreePath);
+          assert.equal(retried.worktree.refName, "agent-issue-7");
+          assert.equal(yield* git(worktreePath, ["branch", "--show-current"]), "agent-issue-7");
+          const fileSystem = yield* FileSystem.FileSystem;
+          assert.equal(
+            yield* fileSystem.exists(pathService.join(worktreePath, "stray.txt")),
+            false,
+          );
+        }),
+    );
+
+    it.effect("reclaims a worktree registered for the same branch at a different, stale path", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const pathService = yield* Path.Path;
+        const staleWorktreePath = pathService.join(
+          yield* makeTmpDir("git-worktrees-old-"),
+          "agent-issue-7",
+        );
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        // Simulates a prior attempt whose path derivation resolved to a different
+        // location (e.g. a homedir-relative config directory on another host), left
+        // behind by an uncleaned bootstrap.
+        yield* driver.createWorktree({
+          cwd,
+          path: staleWorktreePath,
+          refName: initialBranch,
+          newRefName: "agent-issue-7",
+        });
+
+        // Retrying with the *same branch* at a freshly-computed, different path must
+        // not fail with "already checked out at '<stale path>'" — it should reclaim
+        // the stale registration and succeed at the new path.
+        const freshWorktreePath = pathService.join(
+          yield* makeTmpDir("git-worktrees-new-"),
+          "agent-issue-7",
+        );
+        const retried = yield* driver.createWorktree({
+          cwd,
+          path: freshWorktreePath,
+          refName: initialBranch,
+          newRefName: "agent-issue-7",
+        });
+
+        assert.equal(retried.worktree.path, freshWorktreePath);
+        assert.equal(retried.worktree.refName, "agent-issue-7");
+        assert.equal(yield* git(freshWorktreePath, ["branch", "--show-current"]), "agent-issue-7");
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.equal(yield* fileSystem.exists(staleWorktreePath), false);
+      }),
+    );
   });
 
   describe("commit context", () => {
