@@ -20,9 +20,21 @@ export const ExecutionEnvironmentPlatform = Schema.Struct({
 });
 export type ExecutionEnvironmentPlatform = typeof ExecutionEnvironmentPlatform.Type;
 
+export const BrowserCapabilityState = Schema.Literals(["ok", "degraded", "absent"]);
+export type BrowserCapabilityState = typeof BrowserCapabilityState.Type;
+
+export const BrowserCapability = Schema.Struct({
+  state: BrowserCapabilityState,
+  binaryPath: Schema.optionalKey(TrimmedNonEmptyString),
+  version: Schema.optionalKey(TrimmedNonEmptyString),
+  details: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type BrowserCapability = typeof BrowserCapability.Type;
+
 export const ExecutionEnvironmentCapabilities = Schema.Struct({
   repositoryIdentity: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   connectionProbe: Schema.optionalKey(Schema.Boolean),
+  browser: Schema.optionalKey(BrowserCapability),
 });
 export type ExecutionEnvironmentCapabilities = typeof ExecutionEnvironmentCapabilities.Type;
 

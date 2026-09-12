@@ -11,6 +11,7 @@ import * as Schema from "effect/Schema";
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
+import * as BrowserCapabilityProbe from "./BrowserCapabilityProbe.ts";
 import { resolveServerBuildSha } from "./ServerBuildSha.ts";
 import { resolveServerEnvironmentLabel } from "./ServerEnvironmentLabel.ts";
 
@@ -81,6 +82,7 @@ export const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const hostPlatform = yield* HostProcessPlatform;
   const hostArchitecture = yield* HostProcessArchitecture;
+  const browserCapabilityProbe = yield* BrowserCapabilityProbe.BrowserCapabilityProbe;
 
   const readPersistedEnvironmentId = Effect.gen(function* () {
     const exists = yield* fileSystem.exists(serverConfig.environmentIdPath).pipe(
@@ -154,9 +156,17 @@ export const make = Effect.gen(function* () {
     },
   };
 
+  const getDescriptor = Effect.gen(function* () {
+    const browser = yield* browserCapabilityProbe.probe;
+    return {
+      ...descriptor,
+      capabilities: { ...descriptor.capabilities, browser },
+    };
+  });
+
   return ServerEnvironment.of({
     getEnvironmentId: Effect.succeed(environmentId),
-    getDescriptor: Effect.succeed(descriptor),
+    getDescriptor,
   });
 });
 
@@ -165,4 +175,6 @@ export const make = Effect.gen(function* () {
  * state. It intentionally has no fallback Layer.succeed value: callers must
  * provide the external platform services and a ServerConfig.
  */
-export const layer = Layer.effect(ServerEnvironment, make).pipe(Layer.provide(ProcessRunner.layer));
+export const layer = Layer.effect(ServerEnvironment, make).pipe(
+  Layer.provide(Layer.merge(ProcessRunner.layer, BrowserCapabilityProbe.layer)),
+);
