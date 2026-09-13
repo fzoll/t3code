@@ -4,6 +4,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 
 import type { VcsDriverKind, VcsError, VcsRepositoryIdentity } from "@t3tools/contracts";
 import { VcsUnsupportedOperationError } from "@t3tools/contracts";
@@ -13,6 +14,16 @@ import * as VcsDriver from "./VcsDriver.ts";
 
 const DETECTION_CACHE_CAPACITY = 2_048;
 const DETECTION_CACHE_TTL = Duration.seconds(2);
+
+// Under node load, `git rev-parse --is-inside-work-tree` can occasionally miss its 5s
+// timeout even though the repository is healthy (see #11). Retrying a bounded number of
+// times with backoff turns that transient VcsProcessTimeoutError into a slower detection
+// instead of an immediate session-fail; any other detection error still fails fast.
+const DETECTION_TIMEOUT_RETRY_SCHEDULE = Schedule.exponential(Duration.millis(200)).pipe(
+  Schedule.take(2),
+);
+const isRetryableDetectionError = (error: VcsError): boolean =>
+  error._tag === "VcsProcessTimeoutError";
 
 export interface VcsDriverResolveInput {
   readonly cwd: string;
@@ -86,7 +97,12 @@ export const make = Effect.gen(function* () {
     driver: VcsDriver.VcsDriver["Service"],
     cwd: string,
   ) {
-    const repository = yield* driver.detectRepository(cwd);
+    const repository = yield* driver.detectRepository(cwd).pipe(
+      Effect.retry({
+        while: isRetryableDetectionError,
+        schedule: DETECTION_TIMEOUT_RETRY_SCHEDULE,
+      }),
+    );
     if (!repository) {
       return null;
     }
