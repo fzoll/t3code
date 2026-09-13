@@ -19,9 +19,10 @@ const DETECTION_CACHE_TTL = Duration.seconds(2);
 // timeout even though the repository is healthy (see #11). Retrying a bounded number of
 // times with backoff turns that transient VcsProcessTimeoutError into a slower detection
 // instead of an immediate session-fail; any other detection error still fails fast.
-const DETECTION_TIMEOUT_RETRY_SCHEDULE = Schedule.exponential(Duration.millis(200)).pipe(
-  Schedule.take(2),
-);
+const DETECTION_TIMEOUT_RETRY_SCHEDULE = Schedule.max([
+  Schedule.exponential(Duration.millis(200)),
+  Schedule.recurs(2),
+]);
 const isRetryableDetectionError = (error: VcsError): boolean =>
   error._tag === "VcsProcessTimeoutError";
 
