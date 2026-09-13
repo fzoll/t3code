@@ -20,13 +20,15 @@ afterEach(() => {
   runMock.mockReset();
 });
 
-const okResult = (stdout: string) => ({
+const okResult = (stdout: string): ProcessRunner.ProcessRunOutput => ({
   stdout,
   stderr: "",
   code: ChildProcessSpawner.ExitCode(0),
   timedOut: false,
   stdoutTruncated: false,
   stderrTruncated: false,
+  stdoutInvalidUtf8: false,
+  stderrInvalidUtf8: false,
 });
 
 describe("resolveServerBuildSha", () => {
