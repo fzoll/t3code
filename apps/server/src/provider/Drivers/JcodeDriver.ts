@@ -30,8 +30,8 @@ import type { ServerProviderDraft } from "../providerSnapshot.ts";
 import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
 import {
   makeManualOnlyProviderMaintenanceCapabilities,
-  makeStaticProviderMaintenanceResolver,
   resolveProviderMaintenanceCapabilitiesEffect,
+  type ProviderMaintenanceCapabilitiesResolver,
 } from "../providerMaintenance.ts";
 import {
   haveProviderSnapshotSettingsChanged,
@@ -42,12 +42,15 @@ const decodeJcodeSettings = Schema.decodeSync(JcodeSettings);
 
 const DRIVER_KIND = ProviderDriverKind.make("jcode");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
-const UPDATE = makeStaticProviderMaintenanceResolver(
-  makeManualOnlyProviderMaintenanceCapabilities({
-    provider: DRIVER_KIND,
-    packageName: null,
-  }),
-);
+const UPDATE: ProviderMaintenanceCapabilitiesResolver = {
+  resolve: () =>
+    Effect.succeed(
+      makeManualOnlyProviderMaintenanceCapabilities({
+        provider: DRIVER_KIND,
+        packageName: null,
+      }),
+    ),
+};
 
 export type JcodeDriverEnv =
   | ChildProcessSpawner.ChildProcessSpawner

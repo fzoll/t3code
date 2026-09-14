@@ -3369,12 +3369,6 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     });
   });
 
-  const pruneWorktrees = Effect.fn("pruneWorktrees")(function* (input: { readonly cwd: string }) {
-    yield* executeGit("GitVcsDriver.pruneWorktrees", input.cwd, ["worktree", "prune"], {
-      timeoutMs: 10_000,
-      fallbackErrorDetail: "git worktree prune failed",
-    });
-  });
 
   const deleteBranch = Effect.fn("deleteBranch")(function* (input: {
     readonly cwd: string;
