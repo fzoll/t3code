@@ -62,7 +62,6 @@ import {
   XIcon,
 } from "lucide-react";
 import {
-  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -224,16 +223,17 @@ import {
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
 import {
-  Menu,
-  MenuGroupLabel,
-  MenuPopup,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuTrigger,
-} from "./ui/menu";
-import { SidebarContent, SidebarGroup, SidebarMenuButton, useSidebar } from "./ui/sidebar";
+  Combobox,
+  ComboboxEmpty,
+  ComboboxSearchInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxPopup,
+  ComboboxTrigger,
+  useComboboxFilter,
+} from "./ui/combobox";
+import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Popover, PopoverPopup, PopoverTrigger } from "./ui/popover";
@@ -2561,32 +2561,13 @@ export default function Sidebar() {
     () => sortLogicalProjectsForSidebar(unsortedProjectGroups, threads, sidebarProjectSortOrder),
     [sidebarProjectSortOrder, threads, unsortedProjectGroups],
   );
-  // Projects carry a free-text `group` (see the project settings page). The
-  // flat sidebar has nowhere to hang a tree, so the scope picker is the one
-  // place the category still shows: grouped projects get a labelled section,
-  // ungrouped ones fall to the bottom. Nested paths render as their full
-  // "work/clients" label rather than a submenu.
-  const projectScopeSections = useMemo(() => {
-    const byGroup = new Map<string, SidebarProjectSnapshot[]>();
-    const ungrouped: SidebarProjectSnapshot[] = [];
-    for (const project of projectGroups) {
-      const label = project.group?.trim();
-      if (!label) {
-        ungrouped.push(project);
-        continue;
-      }
-      const bucket = byGroup.get(label);
-      if (bucket) bucket.push(project);
-      else byGroup.set(label, [project]);
-    }
-    return {
-      grouped: [...byGroup.entries()].sort(([a], [b]) => a.localeCompare(b)),
-      ungrouped,
-    };
-  }, [projectGroups]);
-
-  const serverProviders = useAtomValue(primaryServerProvidersAtom);
-  const providerEntryByInstanceId = useMemo(
+  const projectGroupsRef = useRef(projectGroups);
+  projectGroupsRef.current = projectGroups;
+  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  // Threads on non-primary environments (T3 Connect, hosted) resolve their
+  // provider entry from their own environment's config: default instance ids
+  // are driver slugs, so a flat map would collide across environments.
+  const providerEntriesByEnvironment = useMemo(
     () =>
       deriveProviderEntriesByEnvironment(
         [...serverConfigs].map(
@@ -2769,44 +2750,23 @@ export default function Sidebar() {
     [openProjectSettings],
   );
 
-  const renderProjectScopeItem = useCallback(
-    (project: SidebarProjectSnapshot) => (
-      <MenuRadioItem
-        key={project.projectKey}
-        value={project.projectKey}
-        closeOnClick
-        className="h-8 min-h-8 px-1 py-0 text-sm font-medium [&>span:last-child]:flex [&>span:last-child]:min-w-0 [&>span:last-child]:items-center [&>span:last-child]:gap-2"
-      >
-        <ProjectFavicon
-          environmentId={project.environmentId}
-          cwd={project.workspaceRoot}
-          faviconPath={project.faviconPath}
-          className="size-4 shrink-0"
-        />
-        <span className="min-w-0 truncate text-sm">{project.displayName}</span>
-        <Button
-          size="icon-xs"
-          variant="ghost-muted"
-          aria-label={`Project settings for ${project.displayName}`}
-          title={`Project settings for ${project.displayName}`}
-          className="ml-auto size-6 [--control-icon-color:currentColor] text-icon-muted focus-visible:bg-accent focus-visible:text-foreground"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            void handleProjectSettings(event, project);
-          }}
-        >
-          <SettingsIcon className="size-3.5" />
-        </Button>
-      </MenuRadioItem>
-    ),
-    [handleProjectSettings],
-  );
-
-  // Settled threads stay in the live shell stream (settled ≠ archived), so
-  // the partition works directly off live shells: no archived-snapshot
-  // merging, no optimistic holds. Archived threads remain hidden here —
-  // archive keeps its original "remove from sidebar" meaning.
-  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  // Keep a dropped row at its destination while its server applies the
+  // lifecycle command and any order-key writes. The next pickup waits for
+  // this hold so a second drop cannot replace an unconfirmed placement.
+  const [optimisticDrop, setOptimisticDrop] = useState<{
+    readonly key: string;
+    readonly sourceSection: SidebarSection;
+    readonly section: "pinned" | "active" | "settled";
+    readonly occurredAt: string;
+    readonly clearsSnooze: boolean;
+    /** Full destination order for pinned and active drops. */
+    readonly order: readonly string[] | null;
+    /** Destination order keys before the drop, to recognize concurrent writes. */
+    readonly keysAtDrop: ReadonlyMap<string, string | null>;
+    /** The keys this drop writes (one per planned assignment). The
+        override holds until all of them appear in canonical state. */
+    readonly assignedKeys: ReadonlyMap<string, string>;
+  } | null>(null);
   const {
     pinnedThreads,
     draggableThreadKeys,
@@ -4749,47 +4709,6 @@ export default function Sidebar() {
                       "max-w-[min(18rem,var(--available-width))] overflow-hidden",
                       compact && "min-w-56",
                     )}
-                    <span className="min-w-0 flex-1 truncate">
-                      {scopedProjectGroup?.displayName ?? "All projects"}
-                    </span>
-                    <ChevronDownIcon className="-mr-px size-4 shrink-0" />
-                  </MenuTrigger>
-                  <MenuPopup align="start" className="w-(--anchor-width)">
-                    <MenuRadioGroup
-                      value={projectScopeKey ?? "all"}
-                      onValueChange={(value) =>
-                        setProjectScopeKey(value === "all" ? null : (value as string))
-                      }
-                    >
-                      <MenuRadioItem
-                        value="all"
-                        closeOnClick
-                        className="h-8 min-h-8 px-1 py-0 text-sm font-medium [&>span:last-child]:flex [&>span:last-child]:min-w-0 [&>span:last-child]:items-center [&>span:last-child]:gap-2"
-                      >
-                        <FolderIcon className="size-4 shrink-0" />
-                        <span className="min-w-0 truncate text-sm">All projects</span>
-                      </MenuRadioItem>
-                      {projectScopeSections.grouped.map(([groupLabel, groupProjects]) => (
-                        <Fragment key={`scope-group:${groupLabel}`}>
-                          <MenuGroupLabel>{groupLabel}</MenuGroupLabel>
-                          {groupProjects.map(renderProjectScopeItem)}
-                        </Fragment>
-                      ))}
-                      {projectScopeSections.ungrouped.map(renderProjectScopeItem)}
-                    </MenuRadioGroup>
-                  </MenuPopup>
-                </Menu>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <SidebarMenuButton
-                        size="icon"
-                        className="relative shrink-0 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-                        onClick={openAddProjectCommandPalette}
-                        type="button"
-                        aria-label="New project"
-                      />
-                    }
                   >
                     <ComboboxSearchInput
                       aria-label="Search projects"

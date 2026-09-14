@@ -125,8 +125,6 @@ import {
   resolveThreadRouteTarget,
 } from "../threadRoutes";
 import { stackedThreadToast, toastManager } from "./ui/toast";
-import { Checkbox } from "./ui/checkbox";
-import { EnvironmentVariableEditor } from "./EnvironmentVariableEditor";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { Kbd } from "./ui/kbd";
 import {
@@ -318,8 +316,6 @@ function buildThreadJumpLabelMap(input: {
 
 interface SidebarThreadRowProps {
   thread: SidebarThreadSummary;
-  isAutoProject: boolean;
-  projectCwd: string | null;
   orderedProjectThreadKeys: readonly string[];
   isActive: boolean;
   openPullRequestsInRightPanel: boolean;
@@ -473,7 +469,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       ...thread,
       lastVisitedAt,
     },
-    isAutoProject: props.isAutoProject,
   });
   const linkedPullRequestStatus = useLinkedThreadPullRequest(
     thread.environmentId,
@@ -951,7 +946,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
 
 interface SidebarProjectThreadListProps {
   projectKey: string;
-  isAutoProject: boolean;
   projectExpanded: boolean;
   hasOverflowingThreads: boolean;
   hiddenThreadStatus: ThreadStatusPill | null;
@@ -1068,8 +1062,6 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
             <SidebarThreadRow
               key={threadKey}
               thread={thread}
-              isAutoProject={props.isAutoProject}
-              projectCwd={projectCwd}
               orderedProjectThreadKeys={orderedProjectThreadKeys}
               isActive={activeRouteThreadKey === threadKey}
               openPullRequestsInRightPanel={openPullRequestsInRightPanel}
@@ -1300,12 +1292,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const [projectGroupingSelection, setProjectGroupingSelection] = useState<
     SidebarProjectGroupingMode | "inherit"
   >("inherit");
-  const [projectEnvTarget, setProjectEnvTarget] = useState<SidebarProjectGroupMember | null>(null);
-  const [projectIsAuto, setProjectIsAuto] = useState(false);
-  const [projectGroup, setProjectGroup] = useState("");
-  const projectEnvGetValuesRef = useRef<
-    () => ReadonlyArray<import("@t3tools/contracts").ProviderInstanceEnvironmentVariable>
-  >(() => []);
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const confirmArchiveButtonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -1346,15 +1332,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       const lastVisitedAt = lastVisitedAtByThreadKey.get(
         scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
       );
-      const memberProject = project.memberProjects.find(
-        (m) => m.environmentId === thread.environmentId,
-      );
       return resolveThreadStatusPill({
         thread: {
           ...thread,
           ...(lastVisitedAt !== null && lastVisitedAt !== undefined ? { lastVisitedAt } : {}),
         },
-        isAutoProject: memberProject?.isAuto ?? false,
       });
     };
     const visibleProjectThreads = sortThreads(
@@ -1402,15 +1384,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       const lastVisitedAt = lastVisitedAtByThreadKey.get(
         scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
       );
-      const memberProject = project.memberProjects.find(
-        (m) => m.environmentId === thread.environmentId,
-      );
       return resolveThreadStatusPill({
         thread: {
           ...thread,
           ...(lastVisitedAt !== null && lastVisitedAt !== undefined ? { lastVisitedAt } : {}),
         },
-        isAutoProject: memberProject?.isAuto ?? false,
       });
     };
     const hasOverflowingThreads = visibleProjectThreads.length > sidebarThreadPreviewCount;
@@ -1717,7 +1695,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
         const actionHandlers = new Map<string, () => Promise<void> | void>();
         const makeLeaf = (
-          action: "rename" | "grouping" | "copy-path" | "environment" | "delete",
+          action: "rename" | "grouping" | "copy-path" | "delete",
           member: SidebarProjectGroupMember,
           options?: {
             destructive?: boolean;
@@ -1736,11 +1714,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               case "copy-path":
                 copyPathToClipboard(member.workspaceRoot, { path: member.workspaceRoot });
                 return;
-              case "environment":
-                setProjectIsAuto(member.isAuto ?? false);
-                setProjectGroup(member.group ?? "");
-                setProjectEnvTarget(member);
-                return;
               case "delete":
                 return handleRemoveProject(member);
             }
@@ -1755,7 +1728,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         };
 
         const buildTargetedItem = (
-          action: "rename" | "grouping" | "copy-path" | "environment" | "delete",
+          action: "rename" | "grouping" | "copy-path" | "delete",
           label: string,
           options?: {
             destructive?: boolean;
@@ -1799,7 +1772,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           [
             buildTargetedItem("rename", "Rename"),
             buildTargetedItem("grouping", "Group into..."),
-            buildTargetedItem("environment", "Project Settings"),
             buildTargetedItem("copy-path", "Copy Path"),
             { id: "project-settings", label: "Project settings", icon: "settings" },
             buildTargetedItem("delete", "Remove", {
@@ -1825,7 +1797,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       isMobile,
       openProjectGroupingDialog,
       openProjectRenameDialog,
-      setProjectEnvTarget,
       project.groupedProjectCount,
       project.memberProjects,
       project.projectKey,
@@ -2510,7 +2481,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
       <SidebarProjectThreadList
         projectKey={project.projectKey}
-        isAutoProject={project.memberProjects.some((m) => m.isAuto)}
         projectExpanded={projectExpanded}
         hasOverflowingThreads={hasOverflowingThreads}
         hiddenThreadStatus={hiddenThreadStatus}
@@ -2661,104 +2631,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               Cancel
             </Button>
             <Button onClick={saveProjectGroupingPreference}>Save</Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
-
-      <Dialog
-        open={projectEnvTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setProjectEnvTarget(null);
-          }
-        }}
-      >
-        <DialogPopup className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Project settings</DialogTitle>
-            <DialogDescription>
-              {projectEnvTarget
-                ? `Configure settings for ${projectEnvTarget.title}.`
-                : "Configure project settings."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogPanel className="space-y-4">
-            <div className="grid gap-1.5">
-              <span className="text-xs font-medium text-foreground">Group</span>
-              <Input
-                aria-label="Project group"
-                value={projectGroup}
-                onChange={(event) => setProjectGroup(event.target.value)}
-                placeholder="e.g. work, personal, automation"
-              />
-              <span className="text-xs text-muted-foreground">
-                Projects with the same group name are grouped together in the sidebar.
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Checkbox
-                checked={projectIsAuto}
-                onCheckedChange={(checked) => setProjectIsAuto(Boolean(checked))}
-                aria-label="Automated project"
-              />
-              <div className="grid gap-0.5">
-                <span className="text-xs font-medium text-foreground">Automated project</span>
-                <span className="text-xs text-muted-foreground">
-                  Threads in this project won't show unread notifications. Use for cc_runner
-                  automated sessions.
-                </span>
-              </div>
-            </div>
-            {projectEnvTarget && (
-              <EnvironmentVariableEditor
-                environment={projectEnvTarget.environment ?? []}
-                onChange={() => {}}
-                getValuesRef={projectEnvGetValuesRef}
-                description="Add variables like GH_TOKEN, GIT_AUTHOR_EMAIL, or ANTHROPIC_API_KEY. These are injected into Claude Code sessions for this project."
-              />
-            )}
-            {projectEnvTarget?.environmentLabel ? (
-              <p className="text-xs text-muted-foreground">
-                Environment: {projectEnvTarget.environmentLabel}
-              </p>
-            ) : null}
-          </DialogPanel>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setProjectEnvTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              onMouseDown={() => {
-                (document.activeElement as HTMLElement | null)?.blur();
-              }}
-              onClick={async () => {
-                if (!projectEnvTarget) return;
-                await new Promise((r) => setTimeout(r, 50));
-                const envValues = projectEnvGetValuesRef.current();
-                const result = await updateProject({
-                  environmentId: projectEnvTarget.environmentId,
-                  input: {
-                    projectId: projectEnvTarget.id,
-                    environment: envValues,
-                    isAuto: projectIsAuto,
-                    group: projectGroup.trim() || null,
-                  },
-                });
-                if (result._tag === "Failure") {
-                  toastManager.add(
-                    stackedThreadToast({
-                      type: "error",
-                      title: "Failed to update environment variables",
-                      description: String(result.cause),
-                    }),
-                  );
-                } else {
-                  setProjectEnvTarget(null);
-                }
-              }}
-            >
-              Save
-            </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
@@ -3093,19 +2965,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     projectsLength,
   } = props;
 
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  const toggleGroup = useCallback((groupName: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupName)) {
-        next.delete(groupName);
-      } else {
-        next.add(groupName);
-      }
-      return next;
-    });
-  }, []);
-
   const handleProjectSortOrderChange = useCallback(
     (sortOrder: SidebarProjectSortOrder) => {
       updateSettings({ sidebarProjectSortOrder: sortOrder });
@@ -3265,115 +3124,30 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           </DndContext>
         ) : (
           <SidebarMenu ref={attachProjectListAutoAnimateRef}>
-            {(() => {
-              interface GroupNode {
-                children: Map<string, GroupNode>;
-                projects: SidebarProjectSnapshot[];
-              }
-
-              const root: GroupNode = { children: new Map(), projects: [] };
-              for (const project of sortedProjects) {
-                const groupPath = project.memberProjects[0]?.group ?? "";
-                if (!groupPath) {
-                  root.projects.push(project);
-                  continue;
+            {sortedProjects.map((project) => (
+              <SidebarProjectListRow
+                key={project.projectKey}
+                project={project}
+                isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
+                activeRouteThreadKey={
+                  activeRouteProjectKey === project.projectKey ? routeThreadKey : null
                 }
-                const segments = groupPath.split("/").filter(Boolean);
-                let node = root;
-                for (const segment of segments) {
-                  if (!node.children.has(segment)) {
-                    node.children.set(segment, { children: new Map(), projects: [] });
-                  }
-                  node = node.children.get(segment)!;
-                }
-                node.projects.push(project);
-              }
-
-              const renderProject = (project: SidebarProjectSnapshot) => (
-                <SidebarProjectListRow
-                  key={project.projectKey}
-                  project={project}
-                  isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
-                  activeRouteThreadKey={
-                    activeRouteProjectKey === project.projectKey ? routeThreadKey : null
-                  }
-                  openPullRequestsInRightPanel={openPullRequestsInRightPanel}
-                  newThreadShortcutLabel={newThreadShortcutLabel}
-                  handleNewThread={handleNewThread}
-                  archiveThread={archiveThread}
-                  deleteThread={deleteThread}
-                  threadJumpLabelByKey={threadJumpLabelByKey}
-                  attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                  expandThreadListForProject={expandThreadListForProject}
-                  collapseThreadListForProject={collapseThreadListForProject}
-                  dragInProgressRef={dragInProgressRef}
-                  suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                  suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
-                  isManualProjectSorting={isManualProjectSorting}
-                  dragHandleProps={null}
-                />
-              );
-
-              const countProjects = (node: GroupNode): number =>
-                node.projects.length +
-                [...node.children.values()].reduce((sum, child) => sum + countProjects(child), 0);
-
-              const renderGroupNode = (
-                name: string,
-                node: GroupNode,
-                path: string,
-                depth: number,
-              ): React.ReactNode => {
-                const fullPath = path ? `${path}/${name}` : name;
-                const isCollapsed = collapsedGroups.has(fullPath);
-                const total = countProjects(node);
-                const sortedChildren = [...node.children.entries()].sort((a, b) =>
-                  a[0].localeCompare(b[0]),
-                );
-
-                return (
-                  <li key={`group:${fullPath}`} className="space-y-0.5">
-                    <button
-                      type="button"
-                      className="flex h-6 w-full items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-                      style={{ paddingLeft: `${depth * 12 + 8}px` }}
-                      onClick={() => toggleGroup(fullPath)}
-                    >
-                      <ChevronRightIcon
-                        className={`size-3 shrink-0 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
-                      />
-                      {name}
-                      <span className="ml-auto pr-2 text-[9px] font-normal tabular-nums">
-                        {total}
-                      </span>
-                    </button>
-                    {!isCollapsed && (
-                      <ul className="space-y-0.5">
-                        {sortedChildren.map(([childName, childNode]) =>
-                          renderGroupNode(childName, childNode, fullPath, depth + 1),
-                        )}
-                        {node.projects.length > 0 && (
-                          <ul style={{ paddingLeft: `${depth * 12}px` }}>
-                            {node.projects.map(renderProject)}
-                          </ul>
-                        )}
-                      </ul>
-                    )}
-                  </li>
-                );
-              };
-
-              const sortedRootChildren = [...root.children.entries()].sort((a, b) =>
-                a[0].localeCompare(b[0]),
-              );
-
-              return (
-                <>
-                  {sortedRootChildren.map(([name, node]) => renderGroupNode(name, node, "", 0))}
-                  {root.projects.map(renderProject)}
-                </>
-              );
-            })()}
+                openPullRequestsInRightPanel={openPullRequestsInRightPanel}
+                newThreadShortcutLabel={newThreadShortcutLabel}
+                handleNewThread={handleNewThread}
+                archiveThread={archiveThread}
+                deleteThread={deleteThread}
+                threadJumpLabelByKey={threadJumpLabelByKey}
+                attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                expandThreadListForProject={expandThreadListForProject}
+                collapseThreadListForProject={collapseThreadListForProject}
+                dragInProgressRef={dragInProgressRef}
+                suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
+                isManualProjectSorting={isManualProjectSorting}
+                dragHandleProps={null}
+              />
+            ))}
           </SidebarMenu>
         )}
 

@@ -66,6 +66,9 @@ const member = {
   environmentLabel: server.label,
   defaultModelSelection: null,
   scripts: [],
+  environment: [],
+  isAuto: false,
+  group: null,
   createdAt: "2026-09-07T00:00:00.000Z",
   updatedAt: "2026-09-07T00:00:00.000Z",
 };
