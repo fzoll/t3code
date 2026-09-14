@@ -19,7 +19,7 @@ import { ProviderRegistry } from "../../provider/Services/ProviderRegistry.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import * as WorkspacePaths from "../../workspace/WorkspacePaths.ts";
 
-export class ExternalDiagnosticsError extends Schema.TaggedErrorClass<ExternalDiagnosticsError>()(
+export class ExternalDiagnosticsError extends Schema.TaggedError<ExternalDiagnosticsError>()(
   "ExternalDiagnosticsError",
   {
     code: Schema.String,
