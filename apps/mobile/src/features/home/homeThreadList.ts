@@ -299,7 +299,7 @@ export function buildHomeThreadGroups(input: {
 
   for (const group of groups.values()) {
     const representative = group.projects[0];
-    if (!representative) {
+    if (!representative || (group.threads.length === 0 && group.pendingTasks.length === 0)) {
       continue;
     }
 
@@ -331,7 +331,7 @@ export function buildHomeThreadGroups(input: {
           pendingTask.title.toLocaleLowerCase().includes(query),
         );
 
-    if (query.length > 0 && matchingThreads.length === 0 && matchingPendingTasks.length === 0) {
+    if (matchingThreads.length === 0 && matchingPendingTasks.length === 0) {
       continue;
     }
 

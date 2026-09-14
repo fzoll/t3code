@@ -28,7 +28,7 @@ import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSw
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { cn } from "../../lib/cn";
-import { AppText, AppText as Text } from "../../components/AppText";
+import { AppText as Text } from "../../components/AppText";
 import { EmptyState } from "../../components/EmptyState";
 import type { WorkspaceEnvironment, WorkspaceState } from "../../state/workspaceModel";
 import type { SavedRemoteConnection } from "../../lib/connection";
@@ -414,19 +414,6 @@ export function HomeScreen(props: HomeScreenProps) {
       scopedThreads,
     ],
   );
-
-  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(() => new Set());
-  const toggleSection = useCallback((path: string) => {
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) {
-        next.delete(path);
-      } else {
-        next.add(path);
-      }
-      return next;
-    });
-  }, []);
 
   const hasSearchQuery = props.searchQuery.trim().length > 0;
   const listLayout = useMemo(
@@ -1050,17 +1037,6 @@ export function HomeScreen(props: HomeScreenProps) {
               onGroupAction={updateGroupDisplay}
             />
           );
-        case "section-header":
-          return (
-            <SectionHeaderRow
-              label={item.label}
-              depth={item.depth}
-              path={item.path}
-              collapsed={item.collapsed}
-              projectCount={item.projectCount}
-              onToggle={toggleSection}
-            />
-          );
       }
     },
     [
@@ -1080,7 +1056,6 @@ export function HomeScreen(props: HomeScreenProps) {
       props.savedConnectionsById,
       threadSearchMatchByKey,
       titleRegenerationEnvironmentIds,
-      toggleSection,
       updateGroupDisplay,
     ],
   );
@@ -1290,49 +1265,5 @@ export function HomeScreen(props: HomeScreenProps) {
         </SwipeableScrollGateProvider>
       </View>
     </View>
-  );
-}
-
-function SectionHeaderRow(props: {
-  readonly label: string;
-  readonly depth: number;
-  readonly path: string;
-  readonly collapsed: boolean;
-  readonly projectCount: number;
-  readonly onToggle: (path: string) => void;
-}) {
-  return (
-    <Pressable
-      onPress={() => props.onToggle(props.path)}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingLeft: 16 + props.depth * 12,
-        paddingRight: 16,
-        height: 32,
-      }}
-    >
-      <AppText
-        className="text-foreground-muted"
-        style={{
-          fontSize: 11,
-          fontWeight: "600",
-          letterSpacing: 0.8,
-          textTransform: "uppercase",
-        }}
-      >
-        {props.collapsed ? "▸" : "▾"} {props.label}
-      </AppText>
-      <AppText
-        className="text-foreground-tertiary"
-        style={{
-          fontSize: 10,
-          marginLeft: "auto",
-          fontVariant: ["tabular-nums"],
-        }}
-      >
-        {props.projectCount}
-      </AppText>
-    </Pressable>
   );
 }
