@@ -9,6 +9,7 @@
  */
 
 import * as Migrator from "effect/unstable/sql/Migrator";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as Effect from "effect/Effect";
 
 // Import all migrations statically
@@ -170,6 +171,25 @@ export interface RunMigrationsOptions {
 export const runMigrations = Effect.fn("runMigrations")(function* ({
   toMigrationInclusive,
 }: RunMigrationsOptions = {}) {
+  // Pre-migrator reconciliation for fork databases. The fork recorded its own
+  // migrations under ids 41-44; upstream later shipped different migrations
+  // under those same ids. The id-ordered migrator treats them as applied and
+  // skips upstream's 41-44, yet later upstream migrations (e.g. id 50) read the
+  // columns those add (linked_pull_request_json, unsettled_at, ...). Running
+  // the four idempotent upstream migrations here — before the ordered run —
+  // closes the gap regardless of ordering. Gated on an established database so
+  // it is a no-op on fresh installs (the ordered migrator builds those cleanly).
+  const sql = yield* SqlClient.SqlClient;
+  const established = yield* sql<{ readonly name: string }>`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projection_threads'
+  `;
+  if (established.length > 0) {
+    yield* Migration0041;
+    yield* Migration0042;
+    yield* Migration0043;
+    yield* Migration0044;
+  }
+
   const executedMigrations = yield* run({ loader: makeMigrationLoader(toMigrationInclusive) });
   const migrations = executedMigrations.map(([id, name]) => `${id}_${name}`);
   yield* migrations.length === 0
