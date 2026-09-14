@@ -42,6 +42,7 @@ import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import { FetchHttpClient } from "effect/unstable/http";
 
+import { APP_VERSION } from "../branding";
 import { readDesktopPrimaryBearerToken } from "../environments/primary/desktopAuth";
 import { primaryEnvironmentHttpLayer } from "../environments/primary/httpLayer";
 import {
@@ -52,12 +53,14 @@ import { clearComposerDraftsEnvironment } from "../composerDraftStore";
 import { isHostedStaticApp } from "../hostedPairing";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { acknowledgeRpcRequest, trackRpcRequestSent } from "../rpc/requestLatencyState";
+import { resolveVersionMismatch } from "../versionSkew";
 import {
   desktopLocalConnectionId,
   readDesktopSecondaryBootstrapsResult,
   type DesktopSecondaryBootstrapsRead,
 } from "./desktopLocal";
 import { connectionStorageLayer } from "./storage";
+import { clientPresentationMetadata } from "./clientMetadata";
 
 let nextObservedRpcRequestId = 0;
 
@@ -114,13 +117,16 @@ const wakeupsLayer = Wakeups.layer({
 });
 
 function clientMetadata() {
-  const desktop = window.desktopBridge !== undefined;
-  const platform = navigator.platform.trim();
-  return {
-    label: desktop ? "T3 Code Desktop" : "T3 Code Web",
-    deviceType: "desktop" as const,
-    ...(platform === "" ? {} : { os: platform }),
-  };
+  return clientPresentationMetadata({
+    appVersion: APP_VERSION,
+    hosted: isHostedStaticApp(),
+    identity: {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      maxTouchPoints: navigator.maxTouchPoints,
+    },
+    desktopBridge: window.desktopBridge,
+  });
 }
 
 function sshPreparationError(cause: unknown) {
@@ -177,6 +183,9 @@ const capabilitiesLayer = Layer.effectContext(
       scopes: AuthStandardClientScopes,
     });
     const cloudSession = CloudSession.of({
+      identity: Effect.sync(() =>
+        Option.fromNullishOr(appAtomRegistry.get(managedRelaySessionAtom)),
+      ),
       clerkToken: Effect.gen(function* () {
         const session = appAtomRegistry.get(managedRelaySessionAtom);
         if (session === null) {
@@ -283,12 +292,36 @@ const capabilitiesLayer = Layer.effectContext(
   }),
 );
 
+// The WebSocket RPC session's own handshake (server.getConfig) decodes
+// against a wire schema that can drift out from under a stale web bundle —
+// exactly the failure mode that surfaces as a generic SchemaError (#1). The
+// environment descriptor above is fetched over plain HTTP against a much
+// narrower, additive-only schema, so it reliably completes even when the
+// WS session never establishes. Logging a mismatch here, before the WS
+// connect is even attempted, gives a concrete, correlated cause for a
+// SchemaError that follows instead of leaving it as an opaque defect.
+const logDescriptorVersionMismatch = (serverVersion: string) => {
+  // Both callers bootstrap a same-machine connection (the primary origin, or
+  // a desktop-local secondary like WSL) built from the same checkout as this
+  // client, so build-metadata (SHA) drift is a meaningful signal here — unlike
+  // comparing against an arbitrary remote peer environment.
+  const mismatch = resolveVersionMismatch(serverVersion, { compareBuildMetadata: true });
+  if (!mismatch) {
+    return Effect.void;
+  }
+  return Effect.logWarning("Web client/server version mismatch detected before connecting.", {
+    clientVersion: mismatch.clientVersion,
+    serverVersion: mismatch.serverVersion,
+  });
+};
+
 const loadPrimaryConnectionRegistration = Effect.fn(
   "web.connectionPlatform.loadPrimaryConnectionRegistration",
 )(function* (resolved: PrimaryEnvironmentTarget) {
   const descriptor = yield* fetchRemoteEnvironmentDescriptor({
     httpBaseUrl: resolved.target.httpBaseUrl,
   }).pipe(Effect.provide(primaryEnvironmentHttpLayer), Effect.mapError(mapRemoteEnvironmentError));
+  yield* logDescriptorVersionMismatch(descriptor.serverVersion);
   return new PrimaryConnectionRegistration({
     target: new PrimaryConnectionTarget({
       environmentId: descriptor.environmentId,
@@ -320,6 +353,7 @@ const loadSecondaryConnectionRegistration = Effect.fn(
   const descriptor = yield* fetchRemoteEnvironmentDescriptor({ httpBaseUrl }).pipe(
     Effect.mapError(mapRemoteEnvironmentError),
   );
+  yield* logDescriptorVersionMismatch(descriptor.serverVersion);
   const issuedAtEpochMs = yield* Clock.currentTimeMillis;
   const access = yield* bootstrapRemoteBearerSession({
     httpBaseUrl,

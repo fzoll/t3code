@@ -1,10 +1,14 @@
 import * as NodeZlib from "node:zlib";
 
-import tailwindcss from "@tailwindcss/vite";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import compression from "compression";
+import * as Effect from "effect/Effect";
+import * as PlatformError from "effect/PlatformError";
+import * as Stream from "effect/Stream";
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { defineProject, type TestProjectInlineConfiguration } from "vite-plus/test/config";
 import "vite-plus/test/config";
 import { defineConfig, type Connect, type Plugin } from "vite-plus";
@@ -13,6 +17,8 @@ import pkg from "./package.json" with { type: "json" };
 import { DEV_PROXIED_PATH_PREFIXES } from "@t3tools/shared/devProxy";
 
 import { loadRepoEnv } from "../../scripts/lib/public-config";
+import { thirdPartyLicensesPlugin } from "../../scripts/lib/third-party-licenses";
+import { tailwindPlugins } from "./vite/tailwind";
 
 const repoEnv = loadRepoEnv();
 Object.assign(process.env, repoEnv);
@@ -39,7 +45,40 @@ const configuredRelayTracingUrl = repoEnv.VITE_RELAY_OTLP_TRACES_URL?.trim() || 
 const configuredRelayTracingDataset = repoEnv.VITE_RELAY_OTLP_TRACES_DATASET?.trim() || "";
 const configuredRelayTracingToken = repoEnv.VITE_RELAY_OTLP_TRACES_TOKEN?.trim() || "";
 const configuredHostedAppChannel = process.env.VITE_HOSTED_APP_CHANNEL?.trim() || "";
-const configuredAppVersion = process.env.APP_VERSION?.trim() || pkg.version;
+
+// Source-mode deploys (e.g. #1's RPi node) build `apps/web/dist` only when
+// someone explicitly runs this build, separately from `git pull` restarting
+// the server. Since APP_VERSION otherwise tracks package.json's semver
+// (which doesn't bump per commit here), a stale bundle can silently share a
+// version string with a server that has since moved on to a
+// schema-incompatible commit. Stamping the checkout SHA this build ran from
+// lets the existing client/server version-mismatch check catch that drift.
+// Explicit APP_VERSION overrides (release builds) are left untouched.
+const collectStreamAsString = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
+  stream.pipe(
+    Stream.decodeText(),
+    Stream.runFold(
+      () => "",
+      (acc, chunk) => acc + chunk,
+    ),
+  );
+
+const resolveBuildGitSha = Effect.fn("resolveBuildGitSha")(function* () {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const child = yield* spawner.spawn(
+    ChildProcess.make("git", ["rev-parse", "HEAD"], { cwd: import.meta.dirname }),
+  );
+  const [stdout, exitCode] = yield* Effect.all(
+    [collectStreamAsString(child.stdout), child.exitCode],
+    { concurrency: "unbounded" },
+  );
+  if (Number(exitCode) !== 0) {
+    return null;
+  }
+  const sha = stdout.trim().toLowerCase();
+  return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+});
+
 const configuredHostedAppUrl = (() => {
   const explicitHostedAppUrl = process.env.VITE_HOSTED_APP_URL?.trim();
   if (explicitHostedAppUrl) {
@@ -80,6 +119,7 @@ const unitTestProject = {
     // run, those async tests can exceed Vitest's default 5s budget.
     hookTimeout: 15_000,
     testTimeout: 15_000,
+    setupFiles: ["../../packages/shared/src/testing/longTempDir.ts"],
   },
 } satisfies TestProjectInlineConfiguration;
 
@@ -151,12 +191,47 @@ const configuredAllowedHosts = (process.env.T3CODE_DEV_ALLOWED_HOSTS ?? "")
   .filter((entry) => entry.length > 0);
 const allowedHosts = [".ts.net", ...configuredAllowedHosts];
 
-export default defineConfig(() => {
+export default defineConfig(async ({ command }) => {
+  // Only spawn `git rev-parse` for actual production builds — dev/test
+  // invocations don't ship a bundle, so there's no drift risk to stamp.
+  const configuredBuildGitSha =
+    command === "build"
+      ? await Effect.runPromise(
+          resolveBuildGitSha().pipe(
+            Effect.orElseSucceed(() => null),
+            Effect.scoped,
+            Effect.provide(NodeServices.layer),
+          ),
+        )
+      : null;
+
+  const configuredAppVersion = (() => {
+    const explicitAppVersion = process.env.APP_VERSION?.trim();
+    if (explicitAppVersion) {
+      return explicitAppVersion;
+    }
+    return configuredBuildGitSha
+      ? `${pkg.version}+git.${configuredBuildGitSha.slice(0, 12)}`
+      : pkg.version;
+  })();
+
   return {
     assetsInclude: ["**/*.wasm"],
     plugins: [
       devCompressionPlugin(),
-      tanstackRouter(),
+      thirdPartyLicensesPlugin({
+        bundleName: "web",
+        configFile: new URL("../../third-party-licenses.config.json", import.meta.url),
+        packageManifests: [
+          { bundle: "web", path: new URL("./package.json", import.meta.url) },
+          { bundle: "server", path: new URL("../server/package.json", import.meta.url) },
+          { bundle: "desktop", path: new URL("../desktop/package.json", import.meta.url) },
+        ],
+      }),
+      // Route components load as split chunks so settings, pull-request, and
+      // usage code stay out of the cold-start payload; the router prefetches
+      // them on navigation intent (see getRouter's defaultPreload).
+      tanstackRouter({ autoCodeSplitting: true }),
       react(),
       babel({
         // We need to be explicit about the parser options after moving to @vitejs/plugin-react v6.0.0
@@ -166,7 +241,7 @@ export default defineConfig(() => {
         parserOpts: { plugins: ["typescript", "jsx"] },
         presets: [reactCompilerPreset()],
       }),
-      tailwindcss(),
+      tailwindPlugins(bundledDev),
     ],
     optimizeDeps: {
       include: [
@@ -226,16 +301,17 @@ export default defineConfig(() => {
         ? {
             // One entry per shared prefix; the server's dev catch-all 404s the
             // same list, so the two sides cannot drift. `/ws` is the app's own
-            // socket — Vite's HMR socket is matched separately and exactly
-            // (path "/" plus a vite-hmr subprotocol), so the two upgrade
-            // handlers don't collide.
+            // socket and `/api` carries the device hub's stream sockets —
+            // Vite's HMR socket is matched separately and exactly (path "/"
+            // plus a vite-hmr subprotocol), so the upgrade handlers don't
+            // collide.
             proxy: Object.fromEntries(
               DEV_PROXIED_PATH_PREFIXES.map((prefix) => [
                 prefix,
                 {
                   target: devProxyTarget,
                   changeOrigin: true,
-                  ...(prefix === "/ws" ? { ws: true } : {}),
+                  ...(prefix === "/ws" || prefix === "/api" ? { ws: true } : {}),
                 },
               ]),
             ),
@@ -257,9 +333,15 @@ export default defineConfig(() => {
           }
         : {}),
     },
+    // @tailwindcss/vite only emits a CSS sourcemap when devSourcemap is on; without it
+    // rolldown flags the transform as SOURCEMAP_BROKEN on every sourcemapped build.
+    css: {
+      devSourcemap: buildSourcemap !== false,
+    },
     build: {
       outDir: "dist",
       emptyOutDir: true,
+      manifest: true,
       sourcemap: buildSourcemap,
     },
     test: {

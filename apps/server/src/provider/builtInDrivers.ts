@@ -27,6 +27,7 @@ import { GrokDriver, type GrokDriverEnv } from "./Drivers/GrokDriver.ts";
 import { JcodeDriver, type JcodeDriverEnv } from "./Drivers/JcodeDriver.ts";
 import { KimiDriver, type KimiDriverEnv } from "./Drivers/KimiDriver.ts";
 import { OpenCodeDriver, type OpenCodeDriverEnv } from "./Drivers/OpenCodeDriver.ts";
+import { AntigravityDriver, type AntigravityDriverEnv } from "./Drivers/AntigravityDriver.ts";
 import type { AnyProviderDriver } from "./ProviderDriver.ts";
 
 /**
@@ -41,7 +42,8 @@ export type BuiltInDriversEnv =
   | GrokDriverEnv
   | JcodeDriverEnv
   | KimiDriverEnv
-  | OpenCodeDriverEnv;
+  | OpenCodeDriverEnv
+  | AntigravityDriverEnv;
 
 /**
  * Ordered list of built-in drivers. Order matters only for tie-breaking in
@@ -56,4 +58,5 @@ export const BUILT_IN_DRIVERS: ReadonlyArray<AnyProviderDriver<BuiltInDriversEnv
   JcodeDriver,
   KimiDriver,
   OpenCodeDriver,
+  AntigravityDriver,
 ];

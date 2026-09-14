@@ -2,8 +2,10 @@ import { assert, it, describe } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
+import { VcsProcessTimeoutError } from "@t3tools/contracts";
 import * as VcsProcess from "./VcsProcess.ts";
 import * as VcsProjectConfig from "./VcsProjectConfig.ts";
 import * as VcsDriverRegistry from "./VcsDriverRegistry.ts";
@@ -137,4 +139,54 @@ describe("VcsDriverRegistry", () => {
       assert.equal(insideWorkTreeChecks, 2);
     }).pipe(Effect.provide(layer));
   });
+
+  it.effect(
+    "retries a transient VcsProcessTimeoutError from isInsideWorkTree during git-prep detection",
+    () => {
+      let isInsideWorkTreeAttempts = 0;
+      const layer = Layer.effect(VcsDriverRegistry.VcsDriverRegistry, VcsDriverRegistry.make).pipe(
+        Layer.provide(NodeServices.layer),
+        Layer.provide(
+          Layer.mock(VcsProjectConfig.VcsProjectConfig)({
+            resolveKind: (input) => Effect.succeed(input.requestedKind ?? "auto"),
+          }),
+        ),
+        Layer.provide(
+          Layer.mock(VcsProcess.VcsProcess)({
+            run: (input) =>
+              Effect.gen(function* () {
+                const command = normalizeGitArgs(input.args).join(" ");
+                if (command === "rev-parse --is-inside-work-tree") {
+                  isInsideWorkTreeAttempts += 1;
+                  if (isInsideWorkTreeAttempts < 3) {
+                    return yield* new VcsProcessTimeoutError({
+                      operation: "GitVcsDriver.isInsideWorkTree",
+                      command: "git",
+                      cwd: input.cwd,
+                      timeoutMs: input.timeoutMs ?? 5_000,
+                    });
+                  }
+                  return processOutput("true\n");
+                }
+                if (command === "rev-parse --show-toplevel") {
+                  return processOutput("/repo\n");
+                }
+                if (command === "rev-parse --git-common-dir") {
+                  return processOutput("/repo/.git\n");
+                }
+                return processOutput("");
+              }),
+          }),
+        ),
+      );
+
+      return Effect.gen(function* () {
+        const registry = yield* VcsDriverRegistry.VcsDriverRegistry;
+        const resolved = yield* registry.resolve({ cwd: "/repo", requestedKind: "git" });
+
+        assert.equal(resolved.repository.rootPath, "/repo");
+        assert.equal(isInsideWorkTreeAttempts, 3);
+      }).pipe(Effect.provide(layer), TestClock.withLive);
+    },
+  );
 });

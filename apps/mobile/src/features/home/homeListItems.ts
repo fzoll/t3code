@@ -73,6 +73,8 @@ export interface HomeListLayout {
   readonly stickyHeaderIndices: ReadonlyArray<number>;
 }
 
+export const EMPTY_HOME_LIST_LAYOUT: HomeListLayout = { items: [], stickyHeaderIndices: [] };
+
 export type HomeGroupDisplayAction = "toggle-collapsed" | "show-more" | "show-less";
 
 export function nextGroupDisplayState(
@@ -327,6 +329,52 @@ export function buildHomeListLayout(input: {
       input.displayStates,
       showAllThreads,
     );
+    const visibleCount = input.showAllThreads
+      ? totalCount
+      : Math.min(
+          display.visibleCount > HOME_INITIAL_VISIBLE_THREADS
+            ? display.visibleCount
+            : baselineCount,
+          totalCount,
+        );
+    const visibleThreads = group.threads.slice(0, visibleCount);
+    const hiddenCount = totalCount - visibleCount;
+    const hasShowMoreRow = !input.showAllThreads && totalCount > baselineCount;
+
+    // Pending (unsent) tasks lead the group and are never paginated away.
+    for (const [pendingIndex, pendingTask] of group.pendingTasks.entries()) {
+      items.push({
+        type: "pending-task",
+        key: pendingTask.key,
+        pendingTask,
+        isLast:
+          pendingIndex === group.pendingTasks.length - 1 &&
+          visibleThreads.length === 0 &&
+          !hasShowMoreRow,
+      });
+    }
+
+    for (const [threadIndex, thread] of visibleThreads.entries()) {
+      items.push({
+        type: "thread",
+        key: `thread:${thread.environmentId}:${thread.id}`,
+        thread,
+        isLast: threadIndex === visibleThreads.length - 1 && !hasShowMoreRow,
+      });
+    }
+
+    if (hasShowMoreRow) {
+      items.push({
+        type: "show-more",
+        key: `show-more:${group.key}`,
+        groupKey: group.key,
+        hiddenCount,
+        // Compare against the group's own baseline, not the global page size:
+        // stale projects start below HOME_INITIAL_VISIBLE_THREADS, and "Show
+        // less" must be offered as soon as anything beyond the baseline shows.
+        canShowLess: visibleCount > baselineCount,
+      });
+    }
   }
 
   return { items, stickyHeaderIndices };
