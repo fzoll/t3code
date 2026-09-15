@@ -317,6 +317,17 @@ export const KimiIcon: Icon = ({ className, ...props }) => (
   </svg>
 );
 
+export const JcodeIcon: Icon = ({ className, ...props }) => (
+  <svg
+    {...props}
+    viewBox="0 0 24 24"
+    fill="none"
+    className={cn("fill-[#1A1A2E] dark:fill-[#E0E0E0]", className)}
+  >
+    <path d="M14 4h3v10.5a5.5 5.5 0 0 1-11 0V13h3v1.5a2.5 2.5 0 0 0 5 0V4Z" />
+  </svg>
+);
+
 export const VisualStudioCode: Icon = (props) => {
   const id = useId();
   const maskId = `${id}-vscode-a`;
