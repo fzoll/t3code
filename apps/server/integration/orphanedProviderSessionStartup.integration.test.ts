@@ -111,6 +111,9 @@ const startupDependencies = Layer.mergeAll(
   AnalyticsService.layerTest,
   Layer.mock(GitVcsDriver.GitVcsDriver)({}),
   Layer.succeed(ProviderService.ProviderService, {
+    getSessionPids: () => Effect.succeed([]),
+    drain: () => Effect.void,
+    isDraining: Effect.succeed(false),
     startSession: () => Effect.die("unused"),
     sendTurn: () => Effect.die("unused"),
     compactThread: () => Effect.die("unused"),
@@ -142,6 +145,9 @@ it.effect(
         const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
 
         yield* engine.dispatch({
+          environment: [],
+          isAuto: false,
+          group: null,
           type: "project.create",
           commandId: CommandId.make("command-create-project"),
           projectId,
@@ -379,6 +385,9 @@ it.effect.each(["opt-in desktop restart", "marked remote update"] as const)(
         const engine = yield* OrchestrationEngine.OrchestrationEngineService;
         const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
         yield* engine.dispatch({
+          environment: [],
+          isAuto: false,
+          group: null,
           type: "project.create",
           commandId: CommandId.make("create-restart-project"),
           projectId,

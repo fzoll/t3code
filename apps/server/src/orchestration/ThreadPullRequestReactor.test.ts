@@ -108,6 +108,9 @@ function thread(
 }
 
 const project = {
+  environment: [],
+  isAuto: false,
+  group: null,
   id: PROJECT_ID,
   title: "Project",
   workspaceRoot: "/workspace/project",

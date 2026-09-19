@@ -28,6 +28,9 @@ const THREAD_ID = ThreadId.make("thread-1");
 const commandId = Effect.succeed(CommandId.make("server:pr-created-link:test"));
 
 const project: OrchestrationProjectShell = {
+  environment: [],
+  isAuto: false,
+  group: null,
   id: PROJECT_ID,
   title: "Project",
   workspaceRoot: "/workspace/project",

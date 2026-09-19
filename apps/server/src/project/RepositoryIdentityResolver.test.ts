@@ -270,15 +270,24 @@ it.layer(NodeServices.layer)("RepositoryIdentityResolverLive", (it) => {
           change === "add" ? "github.com/julius/t3code" : "github.com/t3tools/previous",
         );
 
-      expect(identity).not.toBeNull();
-      expect(identity?.locator.remoteName).toBe("upstream");
-      expect(identity?.canonicalKey).toBe("github.com/t3tools/t3code");
-      expect(identity?.displayName).toBe("t3tools/t3code");
-      expect(identity?.remotes).toEqual([
-        { name: "origin", url: "git@github.com:julius/t3code.git" },
-        { name: "upstream", url: "git@github.com:T3Tools/t3code.git" },
-      ]);
-    }).pipe(Effect.provide(RepositoryIdentityResolver.layer)),
+        yield* git(cwd, [
+          "remote",
+          change === "add" ? "add" : "set-url",
+          "upstream",
+          "git@github.com:T3Tools/t3code.git",
+        ]);
+        expect(yield* resolver.resolve(cwd)).toEqual(initialIdentity);
+        const identity = yield* resolver.resolve(cwd, { refresh: true });
+
+        expect(identity).not.toBeNull();
+        expect(identity?.locator.remoteName).toBe("upstream");
+        expect(identity?.canonicalKey).toBe("github.com/t3tools/t3code");
+        expect(identity?.displayName).toBe("t3tools/t3code");
+        expect(identity?.remotes).toEqual([
+          { name: "origin", url: "git@github.com:julius/t3code.git" },
+          { name: "upstream", url: "git@github.com:T3Tools/t3code.git" },
+        ]);
+      }).pipe(Effect.provide(RepositoryIdentityResolver.layer)),
   );
 
   it.effect("strips embedded credentials from remote urls in the remotes list", () =>

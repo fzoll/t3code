@@ -55,6 +55,9 @@ function makeReadModel(pullRequests: ReadonlyArray<ThreadPullRequestLink>): Orch
     snapshotSequence: 0,
     projects: [
       {
+        environment: [],
+        isAuto: false,
+        group: null,
         id: ProjectId.make("project-1"),
         title: "Project",
         workspaceRoot: "/repo",

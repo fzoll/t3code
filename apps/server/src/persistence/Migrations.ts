@@ -69,6 +69,8 @@ import Migration0053 from "./Migrations/042_ProjectIsAuto.ts";
 import Migration0054 from "./Migrations/043_ProjectGroup.ts";
 import Migration0055 from "./Migrations/044_ReconcileRenumberedForkMigrations.ts";
 
+import Migration0056 from "./Migrations/056_ForkTitleStateCompatibility.ts";
+
 /**
  * Migration loader with all migrations defined inline.
  *
@@ -135,6 +137,7 @@ const migrationEntries = [
   [53, "ProjectIsAuto", Migration0053],
   [54, "ProjectGroup", Migration0054],
   [55, "ReconcileRenumberedForkMigrations", Migration0055],
+  [56, "ForkTitleStateCompatibility", Migration0056],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

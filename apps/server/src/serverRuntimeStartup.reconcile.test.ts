@@ -56,6 +56,9 @@ const makeThread = (
 
 const makeProviderService = (liveThreadIds: ReadonlyArray<ThreadId> = []) =>
   ({
+    getSessionPids: () => Effect.succeed([]),
+    drain: () => Effect.void,
+    isDraining: Effect.succeed(false),
     startSession: () => Effect.die("unused"),
     sendTurn: () => Effect.die("unused"),
     compactThread: () => Effect.die("unused"),

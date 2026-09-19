@@ -56,6 +56,9 @@ function makeProject(
   workspaceRoot = "/workspace/project",
 ): OrchestrationProjectShell {
   return {
+    environment: [],
+    isAuto: false,
+    group: null,
     id,
     title: `Project ${id}`,
     workspaceRoot,

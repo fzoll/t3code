@@ -423,6 +423,7 @@ describe("OrchestrationEngine", () => {
       Layer.provide(
         Layer.succeed(ProjectionSnapshotQuery, {
           getUserInputActivity: () => Effect.die("unused"),
+          listActivitiesByKind: () => Effect.die("unused"),
           getCommandReadModel: () => Effect.succeed(commandReadModel),
           getSnapshot: () =>
             Effect.sync(() => {
@@ -708,6 +709,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-project-1-create"),
         projectId: asProjectId("project-1"),
@@ -768,6 +772,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-project-archive-create"),
         projectId: asProjectId("project-archive"),
@@ -861,6 +868,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-project-replay-create"),
         projectId: asProjectId("project-replay"),
@@ -919,6 +929,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-project-stream-create"),
         projectId: asProjectId("project-stream"),
@@ -980,6 +993,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-branch-race-project-create"),
         projectId: asProjectId("project-branch-race"),
@@ -1061,6 +1077,9 @@ describe("OrchestrationEngine", () => {
         };
         await system.run(
           system.engine.dispatch({
+            environment: [],
+            isAuto: false,
+            group: null,
             type: "project.create",
             commandId: CommandId.make("pr-race-project-create"),
             projectId,
@@ -1171,6 +1190,9 @@ describe("OrchestrationEngine", () => {
       const threadId = ThreadId.make("pr-sync-thread");
       await system.run(
         system.engine.dispatch({
+          environment: [],
+          isAuto: false,
+          group: null,
           type: "project.create",
           commandId: CommandId.make("pr-sync-project-create"),
           projectId,
@@ -1263,6 +1285,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-worktree-bootstrap-project-create"),
         projectId: asProjectId("project-worktree-bootstrap"),
@@ -1316,6 +1341,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-project-ack-create"),
         projectId: asProjectId("project-ack"),
@@ -1405,6 +1433,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-project-turn-diff-create"),
         projectId: asProjectId("project-turn-diff"),
@@ -1529,6 +1560,9 @@ describe("OrchestrationEngine", () => {
 
     await runtime.runPromise(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-project-flaky-create"),
         projectId: asProjectId("project-flaky"),
@@ -1636,6 +1670,9 @@ describe("OrchestrationEngine", () => {
 
     await runtime.runPromise(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-project-atomic-create"),
         projectId: asProjectId("project-atomic"),
@@ -1785,6 +1822,9 @@ describe("OrchestrationEngine", () => {
 
     await runtime.runPromise(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-project-sync-create"),
         projectId: asProjectId("project-sync"),
@@ -1872,6 +1912,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-project-duplicate-create"),
         projectId: asProjectId("project-duplicate"),
@@ -1935,6 +1978,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-retry-project-create"),
         projectId: asProjectId("project-retry"),
@@ -1999,6 +2045,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-conflict-project-create"),
         projectId: asProjectId("project-conflict"),
@@ -2085,6 +2134,9 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch(
         {
+          environment: [],
+          isAuto: false,
+          group: null,
           type: "project.create",
           commandId: CommandId.make("cmd-origin-project-create"),
           projectId: asProjectId("project-origin"),
@@ -2101,6 +2153,9 @@ describe("OrchestrationEngine", () => {
     );
     await system.run(
       engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("cmd-no-origin-project-create"),
         projectId: asProjectId("project-no-origin"),

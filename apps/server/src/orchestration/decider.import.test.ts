@@ -31,6 +31,9 @@ it.layer(NodeServices.layer)("thread history import", (it) => {
         correlationId: CommandId.make("command-project-created"),
         metadata: {},
         payload: {
+          environment: [],
+          isAuto: false,
+          group: null,
           projectId,
           title: "Project",
           workspaceRoot: "/tmp/project",

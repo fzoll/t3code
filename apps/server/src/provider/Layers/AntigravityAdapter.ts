@@ -108,7 +108,7 @@ type Runtime = Pick<
   | "drainEvents"
   | "prompt"
   | "cancel"
->;
+> & { readonly pid?: number };
 type NativePermission = EffectAcpSchema.RequestPermissionRequest;
 type NativePermissionResponse = EffectAcpSchema.RequestPermissionResponse;
 
@@ -1256,6 +1256,11 @@ export const makeAntigravityAdapter = Effect.fn("makeAntigravityAdapter")(functi
     respondToUserInput,
     stopSession,
     stopAll,
+    getSessionPid: (threadId) =>
+      Effect.sync(() => {
+        const context = sessions.get(threadId);
+        return context && !context.stopped ? (context.runtime.pid ?? null) : null;
+      }),
     listSessions: () =>
       Effect.sync(() =>
         [...sessions.values()]

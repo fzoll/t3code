@@ -98,6 +98,9 @@ const makeThreadOutcome = (thread: AgentSessionScanner.AgentSessionThread) =>
   }) satisfies AgentSessionScanner.AgentSessionRecentThread;
 
 const makeProject = (): OrchestrationProjectShell => ({
+  environment: [],
+  isAuto: false,
+  group: null,
   id: PROJECT_ID,
   title: "Project",
   workspaceRoot: WORKSPACE_ROOT,
@@ -589,6 +592,9 @@ it.layer(integrationLayer)("AgentSessionImporter integration", (it) => {
       const threadId = ThreadId.make("import:codex:codex-session");
 
       yield* engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("create-import-integration-project"),
         projectId: PROJECT_ID,
@@ -700,6 +706,9 @@ it.layer(integrationLayer)("AgentSessionImporter integration", (it) => {
         const failed = transcripts[1]!;
         const remaining = transcripts[100]!;
         yield* engine.dispatch({
+          environment: [],
+          isAuto: false,
+          group: null,
           type: "project.create",
           commandId: CommandId.make("create-bounded-import-project"),
           projectId,
@@ -935,6 +944,9 @@ it.layer(integrationLayer)("AgentSessionImporter integration", (it) => {
         );
 
         yield* engine.dispatch({
+          environment: [],
+          isAuto: false,
+          group: null,
           type: "project.create",
           commandId: CommandId.make(`create-import-resume-project-${source}`),
           projectId,
@@ -1051,6 +1063,9 @@ it.layer(integrationLayer)("AgentSessionImporter integration", (it) => {
       );
 
       yield* engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("create-import-binding-race-project"),
         projectId,
@@ -1145,6 +1160,9 @@ it.layer(integrationLayer)("AgentSessionImporter integration", (it) => {
       );
 
       yield* engine.dispatch({
+        environment: [],
+        isAuto: false,
+        group: null,
         type: "project.create",
         commandId: CommandId.make("create-import-turn-race-project"),
         projectId,

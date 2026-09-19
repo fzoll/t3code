@@ -960,6 +960,7 @@ export const make = (
     });
 
     return {
+      pid: Number(child.pid),
       handleRequestPermission: acp.handleRequestPermission,
       handleElicitation: acp.handleElicitation,
       handleReadTextFile: acp.handleReadTextFile,

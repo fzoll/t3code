@@ -120,6 +120,9 @@ it.layer(NodeServices.layer)("decider project scripts", (it) => {
       correlationId: CommandId.make("cmd-legacy-scripts"),
       metadata: {},
       payload: {
+        environment: [],
+        isAuto: false,
+        group: null,
         projectId: asProjectId("project-scripts"),
         title: "Scripts",
         workspaceRoot: "/tmp/scripts",

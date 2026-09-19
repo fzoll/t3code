@@ -253,6 +253,7 @@ export const make = Effect.gen(function* () {
       pullRequestStackActions: true,
       threadPullRequestLinking: true,
       environmentIcon: true,
+      projectCloneTracking: true,
       ...(serverSelfUpdate === null ? {} : { serverSelfUpdate }),
       ...(serverSelfUpdate === "boot-service" || desktopAppUpdate
         ? {
@@ -271,16 +272,14 @@ export const make = Effect.gen(function* () {
     // descriptor request rather than baked in at startup. Host resources are
     // sampled per request for the same reason.
     getDescriptor: readAgentActivityPublishingActive(secrets).pipe(
-      Effect.map(
-        (agentActivityPublishing): ExecutionEnvironmentDescriptor => ({
-          ...baseDescriptor,
-          capabilities: { ...baseDescriptor.capabilities, agentActivityPublishing },
-          resources: {
-            freeMemoryMb: availableMemoryMb(hostPlatform),
-            totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
-          },
-        }),
-      ),
+      Effect.map((agentActivityPublishing): ExecutionEnvironmentDescriptor => ({
+        ...baseDescriptor,
+        capabilities: { ...baseDescriptor.capabilities, agentActivityPublishing },
+        resources: {
+          freeMemoryMb: availableMemoryMb(hostPlatform),
+          totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
+        },
+      })),
     ),
   });
 });
