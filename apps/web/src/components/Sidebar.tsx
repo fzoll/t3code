@@ -1,3 +1,5 @@
+import { groupProjectsByCategory } from "../projectCategories";
+import { Fragment } from "react";
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
 import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
@@ -2354,11 +2356,14 @@ export default function Sidebar() {
   // while the popup search filters the same collection.
   const projectScopeItems = useMemo(
     () => [
-      { value: "all", label: "All projects" },
-      ...projectGroups.map((project) => ({
-        value: project.projectKey,
-        label: project.displayName,
-      })),
+      { value: "all", label: "All projects", category: "" },
+      ...groupProjectsByCategory(projectGroups).flatMap((section) =>
+        section.projects.map((project) => ({
+          value: project.projectKey,
+          label: project.displayName,
+          category: section.label,
+        })),
+      ),
     ],
     [projectGroups],
   );
@@ -2396,10 +2401,25 @@ export default function Sidebar() {
         items: projectScopeItems,
         query: projectScopeMenuState.query,
         matches: (item, query) =>
-          projectScopeFilter.contains(item, query, (candidate) => candidate.label),
+          projectScopeFilter.contains(
+            item,
+            query,
+            (candidate) => candidate.label + " " + candidate.category,
+          ),
       }),
     [projectScopeFilter, projectScopeItems, projectScopeMenuState.query],
   );
+  const projectCategoryHeadings = useMemo(() => {
+    const headings = new Map<string, string>();
+    if (!projectScopeItems.some((item) => item.category)) return headings;
+    let previous: string | undefined;
+    for (const item of filteredProjectScopeItems) {
+      if (item.value === "all") continue;
+      if (item.category !== previous) headings.set(item.value, item.category || "Ungrouped");
+      previous = item.category;
+    }
+    return headings;
+  }, [filteredProjectScopeItems, projectScopeItems]);
   const scopedProjectGroup = useMemo(
     () =>
       projectScopeKey === null
@@ -4464,46 +4484,56 @@ export default function Sidebar() {
                       {(item: (typeof projectScopeItems)[number]) => {
                         const project = projectGroupByScopeKey.get(item.value) ?? null;
                         return (
-                          <ComboboxItem
-                            key={item.value}
-                            hideIndicator
-                            value={item}
-                            className="h-8 min-h-8 py-0 font-medium"
-                            contentClassName="flex min-w-0 items-center gap-2"
-                            onContextMenu={(event) => {
-                              if (project) handleProjectSettings(event, project);
-                            }}
-                          >
-                            {project ? (
-                              <ProjectFavicon project={project} className="size-4 shrink-0" />
-                            ) : (
-                              <FolderIcon className="size-4 shrink-0" />
-                            )}
-                            <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
-                            {project && showProjectEnvironments ? (
-                              <ProjectEnvironmentBadge
-                                group={project}
-                                primaryEnvironmentId={primaryEnvironmentId}
-                                machineByEnvironmentId={environmentMachineById}
-                              />
-                            ) : null}
-                            {project ? (
-                              <Button
-                                size="icon-xs"
-                                variant="ghost-muted"
-                                tabIndex={-1}
-                                aria-hidden="true"
-                                title={`Project settings for ${project.displayName}`}
-                                className="ml-auto size-6 [--control-icon-color:currentColor] text-icon-muted focus-visible:bg-accent focus-visible:text-foreground"
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onClick={(event) => {
-                                  void handleProjectSettings(event, project);
-                                }}
+                          <Fragment key={item.value}>
+                            {projectCategoryHeadings.has(item.value) && (
+                              <div
+                                role="presentation"
+                                className="px-2 pt-3 pb-1 text-xs font-medium text-muted-foreground"
                               >
-                                <SettingsIcon className="size-3.5" />
-                              </Button>
-                            ) : null}
-                          </ComboboxItem>
+                                {projectCategoryHeadings.get(item.value)}
+                              </div>
+                            )}
+                            <ComboboxItem
+                              key={item.value}
+                              hideIndicator
+                              value={item}
+                              className="h-8 min-h-8 py-0 font-medium"
+                              contentClassName="flex min-w-0 items-center gap-2"
+                              onContextMenu={(event) => {
+                                if (project) handleProjectSettings(event, project);
+                              }}
+                            >
+                              {project ? (
+                                <ProjectFavicon project={project} className="size-4 shrink-0" />
+                              ) : (
+                                <FolderIcon className="size-4 shrink-0" />
+                              )}
+                              <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
+                              {project && showProjectEnvironments ? (
+                                <ProjectEnvironmentBadge
+                                  group={project}
+                                  primaryEnvironmentId={primaryEnvironmentId}
+                                  machineByEnvironmentId={environmentMachineById}
+                                />
+                              ) : null}
+                              {project ? (
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost-muted"
+                                  tabIndex={-1}
+                                  aria-hidden="true"
+                                  title={`Project settings for ${project.displayName}`}
+                                  className="ml-auto size-6 [--control-icon-color:currentColor] text-icon-muted focus-visible:bg-accent focus-visible:text-foreground"
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  onClick={(event) => {
+                                    void handleProjectSettings(event, project);
+                                  }}
+                                >
+                                  <SettingsIcon className="size-3.5" />
+                                </Button>
+                              ) : null}
+                            </ComboboxItem>
+                          </Fragment>
                         );
                       }}
                     </ComboboxList>
