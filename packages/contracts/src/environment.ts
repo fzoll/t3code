@@ -76,6 +76,8 @@ export const ServerSelfUpdateCapability = Schema.Literals([
 export type ServerSelfUpdateCapability = typeof ServerSelfUpdateCapability.Type;
 
 export const ExecutionEnvironmentCapabilities = Schema.Struct({
+  /** Durable pipeline workspace receipts and reliable session inventory. */
+  pipelineProtocolVersion: Schema.optionalKey(Schema.Number),
   repositoryIdentity: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   connectionProbe: Schema.optionalKey(Schema.Boolean),
   /** Missing on older servers, which still accept inline image attachments. */
@@ -178,6 +180,8 @@ export const ExecutionEnvironmentSessionResource = Schema.Struct({
 export type ExecutionEnvironmentSessionResource = typeof ExecutionEnvironmentSessionResource.Type;
 
 export const ExecutionEnvironmentResources = Schema.Struct({
+  /** False means session enumeration failed, never an empty-node proof. */
+  sessionsKnown: Schema.optionalKey(Schema.Boolean),
   freeMemoryMb: Schema.Number,
   totalMemoryMb: Schema.Number,
   sessions: Schema.optional(Schema.Array(ExecutionEnvironmentSessionResource)),

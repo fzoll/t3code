@@ -310,9 +310,16 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
         const descriptor = yield* serverEnvironment.getDescriptor;
         const sessionPids = yield* providerService
           .getSessionPids()
-          .pipe(Effect.orElseSucceed(() => []));
-        if (sessionPids.length === 0) {
-          return descriptor;
+          .pipe(Effect.orElseSucceed(() => null));
+        if (sessionPids === null || sessionPids.length === 0) {
+          return {
+            ...descriptor,
+            resources: {
+              ...descriptor.resources!,
+              sessionsKnown: sessionPids !== null,
+              sessions: [],
+            },
+          };
         }
         const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
         const diagnosticsResult = yield* processDiagnostics.read.pipe(
@@ -335,6 +342,7 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
             ...descriptor.resources,
             freeMemoryMb: availableMemoryMb(hostPlatform),
             totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
+            sessionsKnown: true,
             sessions,
           },
         };

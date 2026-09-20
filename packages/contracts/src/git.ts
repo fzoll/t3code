@@ -138,6 +138,7 @@ export const VcsListRefsInput = Schema.Struct({
 export type VcsListRefsInput = typeof VcsListRefsInput.Type;
 
 export const VcsCreateWorktreeInput = Schema.Struct({
+  pipelineAttemptId: Schema.optional(TrimmedNonEmptyStringSchema),
   cwd: TrimmedNonEmptyStringSchema,
   refName: TrimmedNonEmptyStringSchema,
   newRefName: Schema.optional(TrimmedNonEmptyStringSchema),
@@ -286,6 +287,7 @@ export const VcsListRefsResult = Schema.Struct({
 export type VcsListRefsResult = typeof VcsListRefsResult.Type;
 
 export const VcsCreateWorktreeResult = Schema.Struct({
+  pipelineAttemptId: Schema.optional(TrimmedNonEmptyStringSchema),
   worktree: VcsWorktree,
 });
 export type VcsCreateWorktreeResult = typeof VcsCreateWorktreeResult.Type;
@@ -351,6 +353,8 @@ export type VcsPullResult = typeof VcsPullResult.Type;
 
 // RPC / domain errors
 export class GitCommandError extends Schema.TaggedError<GitCommandError>()("GitCommandError", {
+  failureClass: Schema.optional(Schema.String),
+  diagnosticId: Schema.optional(Schema.String),
   operation: Schema.String,
   command: Schema.String,
   cwd: Schema.String,

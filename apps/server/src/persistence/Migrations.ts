@@ -1,3 +1,4 @@
+import Migration0057 from "./Migrations/057_PipelineWorkspaces.ts";
 /**
  * Migration runner with an inline loader.
  *
@@ -138,6 +139,7 @@ const migrationEntries = [
   [54, "ProjectGroup", Migration0054],
   [55, "ReconcileRenumberedForkMigrations", Migration0055],
   [56, "ForkTitleStateCompatibility", Migration0056],
+  [57, "PipelineWorkspaces", Migration0057],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

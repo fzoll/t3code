@@ -274,7 +274,11 @@ export const make = Effect.gen(function* () {
     getDescriptor: readAgentActivityPublishingActive(secrets).pipe(
       Effect.map((agentActivityPublishing): ExecutionEnvironmentDescriptor => ({
         ...baseDescriptor,
-        capabilities: { ...baseDescriptor.capabilities, agentActivityPublishing },
+        capabilities: {
+          ...baseDescriptor.capabilities,
+          agentActivityPublishing,
+          pipelineProtocolVersion: 1,
+        },
         resources: {
           freeMemoryMb: availableMemoryMb(hostPlatform),
           totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),

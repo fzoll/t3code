@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { classifyGitFailure } from "./gitFailure.ts";
 import * as Arr from "effect/Array";
 import * as Cache from "effect/Cache";
 import * as Data from "effect/Data";
@@ -867,6 +869,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         yield* trace2Monitor.flush;
 
         if (!input.allowNonZeroExit && exitCode !== 0) {
+          const diagnosticId = randomUUID();
           // Git echoes its own arguments back in error output, so stderr can
           // carry an embedded credential from a remote URL. `GitCommandError`
           // reaches clients and the persisted event log, so the raw text stays
@@ -874,13 +877,15 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           yield* Effect.logDebug("Git command failed").pipe(
             Effect.annotateLogs({
               operation: commandInput.operation,
+              diagnosticId,
               exitCode,
               stderr: stderr.text.trim().slice(0, 2000),
             }),
           );
           return yield* new GitCommandError({
             ...gitCommandContext(commandInput),
-            detail: "Git command exited with a non-zero status.",
+            ...classifyGitFailure(stderr.text),
+            diagnosticId,
             exitCode,
             stdoutLength: stdout.text.length,
             stderrLength: stderr.text.length,
@@ -966,11 +971,13 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         if (options.allowNonZeroExit || result.exitCode === 0) {
           return Effect.succeed(result);
         }
+        const diagnosticId = randomUUID();
         // Same reasoning as the non-zero exit path above: the raw stderr is
         // debug-log-only, the error carries a stable detail.
         return Effect.logDebug("Git command failed").pipe(
           Effect.annotateLogs({
             operation,
+            diagnosticId,
             exitCode: result.exitCode,
             stderr: result.stderr.trim().slice(0, 2000),
           }),
@@ -978,7 +985,8 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
             Effect.fail(
               new GitCommandError({
                 ...gitCommandContext({ operation, cwd, args }),
-                detail: options.fallbackErrorDetail ?? "Git command exited with a non-zero status.",
+                ...classifyGitFailure(result.stderr),
+                diagnosticId,
                 ...(result.exitCode === null ? {} : { exitCode: result.exitCode }),
                 stdoutLength: result.stdout.length,
                 stderrLength: result.stderr.length,
