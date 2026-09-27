@@ -122,12 +122,6 @@ export interface ProviderServiceShape {
   }) => Effect.Effect<void, ProviderServiceError>;
 
   /**
-   * Returns the OS PID for each active session, keyed by threadId.
-   */
-  readonly getSessionPids: () => Effect.Effect<
-    ReadonlyArray<{ readonly threadId: ThreadId; readonly pid: number; readonly provider: string }>
-  >;
-  /**
    * Upload a thread and return the provider's shareable feedback identifier.
    */
   readonly uploadFeedback: (

@@ -213,7 +213,6 @@ describe("ProviderSessionReaper", () => {
           },
         });
       },
-      getSessionPids: () => Effect.succeed([]),
       drain: () => Effect.void,
       isDraining: Effect.succeed(false),
       rollbackConversation: () => unsupported(),

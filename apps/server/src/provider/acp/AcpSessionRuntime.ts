@@ -291,7 +291,6 @@ export class AcpSessionRuntime extends Context.Service<
       method: string,
       payload: unknown,
     ) => Effect.Effect<void, EffectAcpErrors.AcpError>;
-    readonly pid: number;
   }
 >()("t3/provider/acp/AcpSessionRuntime") {}
 

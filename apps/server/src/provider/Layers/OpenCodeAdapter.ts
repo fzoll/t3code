@@ -3933,7 +3933,6 @@ export function makeOpenCodeAdapter(
       readThread,
       rollbackThread,
       stopAll,
-      getSessionPid: (_threadId) => Effect.succeed(null),
       get streamEvents() {
         return Stream.fromQueue(runtimeEvents);
       },

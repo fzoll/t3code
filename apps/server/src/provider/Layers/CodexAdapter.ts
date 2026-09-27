@@ -2729,11 +2729,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     listSessions,
     hasSession,
     stopAll,
-    getSessionPid: (threadId) =>
-      Effect.sync(() => {
-        const ctx = sessions.get(threadId);
-        return ctx && !ctx.stopped ? ctx.runtime.pid : null;
-      }),
     get streamEvents() {
       return Stream.fromQueue(runtimeEventQueue);
     },

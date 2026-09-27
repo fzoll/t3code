@@ -844,11 +844,8 @@ const buildAppUnderTest = (options?: {
           Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({
             resolveTargets: () => Effect.succeed([]),
           }),
-          // The environment descriptor route annotates per-thread session
-          // PIDs; no test here drives live provider sessions.
-          Layer.mock(ProviderService)({
-            getSessionPids: () => Effect.succeed([]),
-          }),
+          // No test here drives live provider sessions.
+          Layer.mock(ProviderService)({}),
         ),
       ),
       Layer.provide(
