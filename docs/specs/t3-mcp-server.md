@@ -38,17 +38,24 @@ Server health snapshot.
 
 ```json
 {
-  "nodeId": "rpi5",
-  "uptime": "4h 23m",
+  "environmentId": "rpi5",
+  "label": "rpi5",
   "version": "0.0.31",
   "platform": { "os": "linux", "arch": "arm64" },
-  "memory": { "freeMb": 11069, "totalMb": 16003 },
-  "sessions": {
-    "active": 2,
-    "total": 15
+  "uptimeSeconds": 15780,
+  "hostResources": {
+    "sampledAt": 1730000000000,
+    "cpuUtilization": 0.12,
+    "cpuCount": 4,
+    "availableMemoryBytes": 11608130560,
+    "totalMemoryBytes": 16779264000
   }
 }
 ```
+
+`hostResources` is the same whole-host sample returned by `server.getHostResources`
+and consumed by load balancing. Read `availableMemoryBytes` / `totalMemoryBytes`
+for memory pressure and `sampledAt` to enforce a freshness window.
 
 #### `t3.providers.list`
 
