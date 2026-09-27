@@ -11,14 +11,12 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeCrypto from "node:crypto";
-import * as NodeOS from "node:os";
 
 import * as ServerConfig from "../../config.ts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
-import { availableMemoryMb } from "../../diagnostics/availableMemory.ts";
 import * as ProcessDiagnostics from "../../diagnostics/ProcessDiagnostics.ts";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
+import * as HostResources from "../../resourceTelemetry/HostResources.ts";
 import { projectThreadDetailSnapshot } from "../../orchestration/ActivityPayloadProjection.ts";
 import { normalizeDispatchCommand } from "../../orchestration/Normalizer.ts";
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
@@ -61,10 +59,11 @@ const handlers = {
       const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
       const providerService = yield* ProviderService;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
-      const hostPlatform = yield* HostProcessPlatform;
+      const hostResources = yield* HostResources.HostResources;
       const descriptor = yield* serverEnvironment.getDescriptor.pipe(
         Effect.mapError(internalError("descriptor_failed")),
       );
+      const host = yield* hostResources.read;
       const sessionPids = yield* providerService
         .getSessionPids()
         .pipe(Effect.orElseSucceed(() => []));
@@ -84,8 +83,8 @@ const handlers = {
         platform: { os: descriptor.platform.os, arch: descriptor.platform.arch },
         uptimeSeconds: Math.floor(process.uptime()),
         memory: {
-          freeMb: availableMemoryMb(hostPlatform),
-          totalMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
+          freeMb: Math.round(host.availableMemoryBytes / (1024 * 1024)),
+          totalMb: Math.round(host.totalMemoryBytes / (1024 * 1024)),
         },
         sessions: sessionPids.map((session) => ({
           threadId: String(session.threadId),

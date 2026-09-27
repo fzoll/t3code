@@ -17,6 +17,7 @@ import { OrchestrationEngineService } from "../../orchestration/Services/Orchest
 import { ProjectionSnapshotQuery } from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ProviderRegistry } from "../../provider/Services/ProviderRegistry.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import * as HostResources from "../../resourceTelemetry/HostResources.ts";
 import * as WorkspacePaths from "../../workspace/WorkspacePaths.ts";
 
 export class ExternalDiagnosticsError extends Schema.TaggedError<ExternalDiagnosticsError>()(
@@ -34,6 +35,7 @@ const dependencies = [
   ProviderService,
   ProviderRegistry,
   ProcessDiagnostics.ProcessDiagnostics,
+  HostResources.HostResources,
   ProjectionSnapshotQuery,
   OrchestrationEngineService,
   FileSystem.FileSystem,

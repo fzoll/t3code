@@ -16,15 +16,33 @@ import {
   RELAY_URL_SECRET,
 } from "../cloud/config.ts";
 import * as ServerConfig from "../config.ts";
+import * as HostResources from "../resourceTelemetry/HostResources.ts";
 import * as ServerEnvironment from "./ServerEnvironment.ts";
 
 const isServerEnvironmentIdPersistenceError = Schema.is(
   ServerEnvironment.ServerEnvironmentIdPersistenceError,
 );
 
+// These tests exercise environment identity and capability advertisement, not
+// host telemetry, so a fixed snapshot keeps the descriptor's resources block
+// deterministic without pulling in the real platform sampling services.
+const stubHostResourcesLayer = Layer.succeed(
+  HostResources.HostResources,
+  HostResources.HostResources.of({
+    read: Effect.succeed({
+      sampledAt: 0,
+      cpuUtilization: null,
+      cpuCount: 1,
+      availableMemoryBytes: 0,
+      totalMemoryBytes: 0,
+    }),
+  }),
+);
+
 const makeServerEnvironmentLayer = (baseDir: string) =>
   ServerEnvironment.layer.pipe(
     Layer.provide(ServerSecretStore.layer),
+    Layer.provide(stubHostResourcesLayer),
     Layer.provide(ServerConfig.layerTest(process.cwd(), baseDir)),
   );
 
@@ -177,6 +195,45 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
     }),
   );
 
+  it.effect("derives descriptor memory from the shared host resources snapshot", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-server-environment-resources-test-",
+      });
+      const hostResourcesLayer = Layer.succeed(
+        HostResources.HostResources,
+        HostResources.HostResources.of({
+          read: Effect.succeed({
+            sampledAt: 0,
+            cpuUtilization: null,
+            cpuCount: 1,
+            availableMemoryBytes: 512 * 1024 * 1024,
+            totalMemoryBytes: 2048 * 1024 * 1024,
+          }),
+        }),
+      );
+
+      const descriptor = yield* Effect.gen(function* () {
+        const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
+        return yield* serverEnvironment.getDescriptor;
+      }).pipe(
+        Effect.provide(
+          ServerEnvironment.layer.pipe(
+            Layer.provide(ServerSecretStore.layer),
+            Layer.provide(hostResourcesLayer),
+            Layer.provide(ServerConfig.layerTest(process.cwd(), baseDir)),
+          ),
+        ),
+      );
+
+      // Bytes come straight from the deduplicated host telemetry; the descriptor
+      // only rounds them to whole megabytes.
+      expect(descriptor.resources?.freeMemoryMb).toBe(512);
+      expect(descriptor.resources?.totalMemoryMb).toBe(2048);
+    }),
+  );
+
   it.effect("reports agent activity publishing from the current secret state", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
@@ -184,7 +241,10 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
         prefix: "t3-server-environment-publish-test-",
       });
       const testLayer = Layer.mergeAll(
-        ServerEnvironment.layer.pipe(Layer.provide(ServerSecretStore.layer)),
+        ServerEnvironment.layer.pipe(
+          Layer.provide(ServerSecretStore.layer),
+          Layer.provide(stubHostResourcesLayer),
+        ),
         ServerSecretStore.layer,
       ).pipe(Layer.provide(ServerConfig.layerTest(process.cwd(), baseDir)));
 
@@ -240,6 +300,7 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
           Effect.provide(
             ServerEnvironment.layer.pipe(
               Layer.provide(ServerSecretStore.layer),
+              Layer.provide(stubHostResourcesLayer),
               Layer.provide(ServerConfig.layer({ ...serverConfig, ...overrides })),
             ),
           ),
@@ -304,6 +365,7 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
           Effect.provide(
             ServerEnvironment.layer.pipe(
               Layer.provide(emptySecretStoreLayer),
+              Layer.provide(stubHostResourcesLayer),
               Layer.provide(Layer.merge(ServerConfig.layer(serverConfig), failingFileSystemLayer)),
             ),
           ),
