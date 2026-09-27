@@ -304,6 +304,14 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
       Effect.fn("environment.metadata.descriptor")(function* (args) {
         yield* annotateEnvironmentRequest(args.endpoint.name);
         const descriptor = yield* serverEnvironment.getDescriptor;
+        // Whole-host memory lives in the descriptor's resources block, sampled
+        // by getDescriptor from HostResources. This route only layers per-session
+        // PID/RSS on top; with no resources block there is nothing to annotate,
+        // and fabricating a partial one would drop the schema-required memory
+        // fields, so pass the descriptor through unchanged.
+        if (!descriptor.resources) {
+          return descriptor;
+        }
         const sessionPids = yield* providerService
           .getSessionPids()
           .pipe(Effect.orElseSucceed(() => null));
@@ -311,7 +319,7 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
           return {
             ...descriptor,
             resources: {
-              ...descriptor.resources!,
+              ...descriptor.resources,
               sessionsKnown: sessionPids !== null,
               sessions: [],
             },
@@ -335,7 +343,7 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
         return {
           ...descriptor,
           resources: {
-            ...descriptor.resources!,
+            ...descriptor.resources,
             sessionsKnown: true,
             sessions,
           },
