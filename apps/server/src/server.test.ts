@@ -845,7 +845,7 @@ const buildAppUnderTest = (options?: {
             resolveTargets: () => Effect.succeed([]),
           }),
           // No test here drives live provider sessions.
-          Layer.mock(ProviderService)({}),
+          Layer.mock(ProviderService.ProviderService)({}),
         ),
       ),
       Layer.provide(
@@ -5439,6 +5439,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         workspaceRoot,
         defaultModelSelection: null,
         scripts: [],
+        environment: [],
+        isAuto: false,
+        group: null,
         createdAt: "2026-08-31T12:00:00.000Z",
         updatedAt: "2026-08-31T12:00:00.000Z",
       } as const;
