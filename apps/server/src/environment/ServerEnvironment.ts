@@ -1,10 +1,9 @@
-import * as NodeOS from "node:os";
 import {
   EnvironmentId,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   type ExecutionEnvironmentDescriptor,
 } from "@t3tools/contracts";
-import { availableMemoryMb } from "../diagnostics/availableMemory.ts";
+import * as HostResources from "../resourceTelemetry/HostResources.ts";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -203,6 +202,7 @@ export const make = Effect.gen(function* () {
   const identity = yield* ServerEnvironmentIdentity;
   const hostPlatform = yield* HostProcessPlatform;
   const hostArchitecture = yield* HostProcessArchitecture;
+  const hostResources = yield* HostResources.HostResources;
   const environmentId = yield* identity.getEnvironmentId;
   const cwdBaseName = path.basename(serverConfig.cwd).trim();
   const label = yield* resolveServerEnvironmentLabel({ cwdBaseName });
@@ -270,18 +270,21 @@ export const make = Effect.gen(function* () {
     // publish`, the client settings toggle), so the capability is read per
     // descriptor request rather than baked in at startup. Host resources are
     // sampled per request for the same reason.
-    getDescriptor: readAgentActivityPublishingActive(secrets).pipe(
-      Effect.map(
-        (agentActivityPublishing): ExecutionEnvironmentDescriptor => ({
-          ...baseDescriptor,
-          capabilities: { ...baseDescriptor.capabilities, agentActivityPublishing },
-          resources: {
-            freeMemoryMb: availableMemoryMb(hostPlatform),
-            totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
-          },
-        }),
-      ),
-    ),
+    getDescriptor: Effect.gen(function* () {
+      const agentActivityPublishing = yield* readAgentActivityPublishingActive(secrets);
+      // Kernel-aware memory comes from the shared HostResources snapshot (5s
+      // cache) instead of a second sampler; one source keeps the descriptor and
+      // the load-balancing `hostResources` RPC reporting the same numbers.
+      const resources = yield* hostResources.read;
+      return {
+        ...baseDescriptor,
+        capabilities: { ...baseDescriptor.capabilities, agentActivityPublishing },
+        resources: {
+          freeMemoryMb: Math.round(resources.availableMemoryBytes / (1024 * 1024)),
+          totalMemoryMb: Math.round(resources.totalMemoryBytes / (1024 * 1024)),
+        },
+      } satisfies ExecutionEnvironmentDescriptor;
+    }),
   });
 });
 

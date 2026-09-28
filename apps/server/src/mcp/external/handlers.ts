@@ -11,12 +11,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeCrypto from "node:crypto";
-import * as NodeOS from "node:os";
 
 import * as ServerConfig from "../../config.ts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
-import { availableMemoryMb } from "../../diagnostics/availableMemory.ts";
 import * as ProcessDiagnostics from "../../diagnostics/ProcessDiagnostics.ts";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
 import { projectThreadDetailSnapshot } from "../../orchestration/ActivityPayloadProjection.ts";
@@ -61,7 +58,6 @@ const handlers = {
       const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
       const providerService = yield* ProviderService;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
-      const hostPlatform = yield* HostProcessPlatform;
       const descriptor = yield* serverEnvironment.getDescriptor.pipe(
         Effect.mapError(internalError("descriptor_failed")),
       );
@@ -83,9 +79,12 @@ const handlers = {
         version: descriptor.serverVersion,
         platform: { os: descriptor.platform.os, arch: descriptor.platform.arch },
         uptimeSeconds: Math.floor(process.uptime()),
+        // Descriptor memory is the shared HostResources snapshot (see
+        // ServerEnvironment); get_node_health reports the same kernel-aware
+        // numbers as the load-balancing hostResources RPC.
         memory: {
-          freeMb: availableMemoryMb(hostPlatform),
-          totalMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
+          freeMb: descriptor.resources?.freeMemoryMb ?? 0,
+          totalMb: descriptor.resources?.totalMemoryMb ?? 0,
         },
         sessions: sessionPids.map((session) => ({
           threadId: String(session.threadId),
