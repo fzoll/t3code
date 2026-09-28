@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off
 /**
  * ClaudeAdapterLive - Scoped live implementation for the Claude Agent provider adapter.
  *
@@ -6,6 +7,7 @@
  *
  * @module ClaudeAdapterLive
  */
+import * as NodeChildProcess from "node:child_process";
 import {
   type CanUseTool,
   query,
@@ -87,6 +89,7 @@ import { ServerConfig } from "../../config.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
 import { claudeSignedOutMessage, makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
+import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
 import { planClaudeSkillDispatch } from "../Drivers/ClaudeSkillDispatch.ts";
 import { discoverClaudeSkills } from "../Drivers/ClaudeSkills.ts";
 import { buildRuntimeInstructions } from "../RuntimeInstructions.ts";
@@ -354,6 +357,7 @@ interface ClaudeSessionContext {
   lastKnownTotalProcessedTokens: number | undefined;
   lastAssistantUuid: string | undefined;
   lastThreadStartedId: string | undefined;
+  pid: number | null;
   /** Limits already announced for the running turn, keyed `window:resetsAt`. */
   announcedUsageLimits: { turnId: string; keys: Set<string> } | undefined;
   stopped: boolean;
@@ -4644,11 +4648,15 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       ) => runPromise(handleResumeDialog(request, callbackOptions));
 
       const claudeBinaryPath = claudeSdkExecutablePath;
+      const parsedArgs = parseCliArgs(claudeSettings.launchArgs).flags;
+      const remoteControlAtStartup = "remote-control" in parsedArgs || "rc" in parsedArgs;
       const {
+        "remote-control": _rc,
+        rc: _rcShort,
         "permission-mode": launchArgPermissionMode,
         "dangerously-skip-permissions": launchArgSkipPermissions,
         ...extraArgs
-      } = parseCliArgs(claudeSettings.launchArgs).flags;
+      } = parsedArgs;
       const selectedModel =
         input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;
       const modelSelection = selectedModel
@@ -4743,8 +4751,14 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         canUseTool,
         onUserDialog,
         supportedDialogKinds: ["resume_return"],
-        env: McpProviderSession.withAgentDeviceEnvironment(claudeEnvironment, mcpSession),
+        env: McpProviderSession.withAgentDeviceEnvironment(
+          input.projectEnvironment
+            ? mergeProviderInstanceEnvironment(input.projectEnvironment, claudeEnvironment)
+            : claudeEnvironment,
+          mcpSession,
+        ),
         additionalDirectories,
+        ...(remoteControlAtStartup ? { remoteControlAtStartup: true } : {}),
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
         ...(mcpSession
           ? {
@@ -4785,6 +4799,20 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         "claude.query.extra_args_json": encodeJsonStringForDiagnostics(extraArgs) ?? "",
         "claude.query.path_to_executable": claudeBinaryPath,
       });
+
+      let capturedPid: number | null = null;
+      if (!queryOptions.spawnClaudeCodeProcess) {
+        queryOptions.spawnClaudeCodeProcess = (spawnOptions) => {
+          const cp = NodeChildProcess.spawn(spawnOptions.command, spawnOptions.args, {
+            cwd: spawnOptions.cwd,
+            env: spawnOptions.env,
+            signal: spawnOptions.signal,
+            stdio: ["pipe", "pipe", "pipe"],
+          });
+          capturedPid = cp.pid ?? null;
+          return cp;
+        };
+      }
 
       const queryRuntime = yield* Effect.try({
         try: () =>
@@ -4852,6 +4880,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         lastKnownTotalProcessedTokens: undefined,
         lastAssistantUuid: resumeState?.resumeSessionAt,
         lastThreadStartedId: undefined,
+        pid: capturedPid,
         announcedUsageLimits: undefined,
         stopped: false,
       };

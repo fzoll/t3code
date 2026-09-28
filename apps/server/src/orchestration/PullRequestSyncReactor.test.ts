@@ -53,6 +53,9 @@ function makeProject(id: ProjectId = PROJECT_ID): OrchestrationProjectShell {
     workspaceRoot: "/workspace/project",
     defaultModelSelection: null,
     scripts: [],
+    environment: [],
+    isAuto: false,
+    group: null,
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: NOW,
   };

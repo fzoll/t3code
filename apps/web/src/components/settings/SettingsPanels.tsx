@@ -2216,6 +2216,19 @@ export function GeneralSettingsPanel() {
       <ProjectDefaultsSettings category="general" />
       <SettingsSection id="organization" title="Organization">
         <SettingsRow
+          title="Project-based sidebar"
+          description="Show per-project thread trees (v1) instead of the default flat sidebar."
+          control={
+            <Switch
+              checked={settings.legacySidebarEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ legacySidebarEnabled: Boolean(checked) })
+              }
+              aria-label="Project-based sidebar"
+            />
+          }
+        />
+        <SettingsRow
           {...searchableSetting("project-grouping")}
           description="Combine matching repositories across environments."
           resetAction={

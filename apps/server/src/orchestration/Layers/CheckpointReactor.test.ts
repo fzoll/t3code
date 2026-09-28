@@ -136,6 +136,8 @@ function createProviderServiceHarness(
           continuationKey: `${providerName}:instance:${instanceId}`,
         },
       }),
+    drain: () => Effect.void,
+    isDraining: Effect.succeed(false),
     rollbackConversation,
     uploadFeedback: () => unsupported(),
     get streamEvents() {

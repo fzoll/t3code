@@ -41,6 +41,7 @@ import { causeErrorTag } from "@t3tools/shared/observability";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as DateTime from "effect/DateTime";
+import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -1177,6 +1178,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   // `runStopAll` — replacing the pre-Slice-D startup snapshot so hot-added
   // instances become visible to those call sites as soon as settings edits
   // land.
+  const drainingRef = yield* Ref.make(false);
+
   const subscribedAdapters = yield* Ref.make(
     new Map<ProviderInstanceId, ProviderAdapterShape<ProviderAdapterError>>(),
   );
@@ -1396,6 +1399,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const startSession: ProviderServiceMethod<"startSession"> = Effect.fn("startSession")(
     function* (threadId, rawInput) {
+      if (yield* Ref.get(drainingRef)) {
+        return yield* new ProviderValidationError({
+          operation: "startSession",
+          issue: "Server is shutting down (drain mode). No new sessions accepted.",
+        });
+      }
+
       const parsed = yield* decodeInputOrValidationError({
         operation: "ProviderService.startSession",
         schema: ProviderSessionStartInput,
@@ -2388,8 +2398,47 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     yield* analytics.flush;
   });
 
+  const drainThenStopAll = Effect.gen(function* () {
+    const isDraining = yield* Ref.get(drainingRef);
+    if (!isDraining) {
+      yield* Ref.set(drainingRef, true);
+      const currentAdapters = yield* getAdapterEntries;
+      const allSessions = yield* Effect.forEach(currentAdapters, ([, adapter]) =>
+        adapter.listSessions(),
+      ).pipe(Effect.map((groups) => groups.flatMap((s) => s)));
+      const running = allSessions.filter(
+        (s) => s.status === "running" || s.status === "connecting",
+      );
+      if (running.length > 0) {
+        yield* Effect.logInfo(
+          `Graceful shutdown: waiting for ${running.length} active session(s) to finish...`,
+        );
+        const deadline = (yield* Clock.currentTimeMillis) + 2 * 60 * 60 * 1000;
+        let remaining = running.length;
+        while (remaining > 0 && (yield* Clock.currentTimeMillis) < deadline) {
+          yield* Effect.sleep(5_000);
+          const adapters = yield* getAdapterEntries;
+          const sessions = yield* Effect.forEach(adapters, ([, adapter]) =>
+            adapter.listSessions(),
+          ).pipe(Effect.map((groups) => groups.flatMap((s) => s)));
+          remaining = sessions.filter(
+            (s) => s.status === "running" || s.status === "connecting",
+          ).length;
+        }
+        if (remaining > 0) {
+          yield* Effect.logWarning(
+            `Graceful shutdown timeout: ${remaining} session(s) still running, forcing stop.`,
+          );
+        } else {
+          yield* Effect.logInfo("Graceful shutdown: all sessions completed.");
+        }
+      }
+    }
+    yield* runStopAll();
+  });
+
   yield* Effect.addFinalizer(() =>
-    runStopAll().pipe(
+    drainThenStopAll.pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("failed to stop provider service", {
           errorTag: causeErrorTag(cause),
@@ -2418,6 +2467,31 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     get streamEvents(): ProviderServiceMethod<"streamEvents"> {
       return Stream.fromPubSub(runtimeEventPubSub);
     },
+    drain: (options) =>
+      Effect.gen(function* () {
+        yield* Ref.set(drainingRef, true);
+        yield* Effect.logInfo("Provider service entering drain mode — no new sessions accepted.");
+        const timeoutMs = options?.timeoutMs ?? 2 * 60 * 60 * 1000;
+        const pollIntervalMs = 5_000;
+        const deadline = (yield* Clock.currentTimeMillis) + timeoutMs;
+        while ((yield* Clock.currentTimeMillis) < deadline) {
+          const currentAdapters = yield* getAdapterEntries;
+          const allSessions = yield* Effect.forEach(currentAdapters, ([, adapter]) =>
+            adapter.listSessions(),
+          ).pipe(Effect.map((groups) => groups.flatMap((s) => s)));
+          const running = allSessions.filter(
+            (s) => s.status === "running" || s.status === "connecting",
+          );
+          if (running.length === 0) {
+            yield* Effect.logInfo("Drain complete — all sessions finished.");
+            return;
+          }
+          yield* Effect.logInfo(`Drain: ${running.length} session(s) still running. Waiting...`);
+          yield* Effect.sleep(pollIntervalMs);
+        }
+        yield* Effect.logWarning("Drain timeout reached — forcing shutdown with active sessions.");
+      }),
+    isDraining: Ref.get(drainingRef),
   } satisfies ProviderService.ProviderService["Service"];
 });
 

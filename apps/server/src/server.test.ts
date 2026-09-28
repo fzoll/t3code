@@ -326,6 +326,9 @@ const makeDefaultOrchestrationReadModel = () => {
         workspaceRoot: "/tmp/default-project",
         defaultModelSelection,
         scripts: [],
+        environment: [],
+        isAuto: false,
+        group: null,
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
@@ -841,6 +844,8 @@ const buildAppUnderTest = (options?: {
           Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({
             resolveTargets: () => Effect.succeed([]),
           }),
+          // No test here drives live provider sessions.
+          Layer.mock(ProviderService.ProviderService)({}),
         ),
       ),
       Layer.provide(
@@ -5434,6 +5439,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         workspaceRoot,
         defaultModelSelection: null,
         scripts: [],
+        environment: [],
+        isAuto: false,
+        group: null,
         createdAt: "2026-08-31T12:00:00.000Z",
         updatedAt: "2026-08-31T12:00:00.000Z",
       } as const;
@@ -8148,6 +8156,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             workspaceRoot: "/tmp/project-a",
             defaultModelSelection,
             scripts: [],
+            environment: [],
+            isAuto: false,
+            group: null,
             createdAt: now,
             updatedAt: now,
             deletedAt: null,

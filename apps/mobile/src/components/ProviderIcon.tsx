@@ -64,6 +64,14 @@ export function ProviderIcon(props: ProviderIconProps) {
     );
   }
 
+  if (props.provider === "jcode") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path fill={mono} d="M14 4h3v10.5a5.5 5.5 0 0 1-11 0V13h3v1.5a2.5 2.5 0 0 0 5 0V4Z" />
+      </Svg>
+    );
+  }
+
   if (props.provider === "opencode") {
     return (
       <Svg width={size} height={size} viewBox="0 0 32 40" fill="none">

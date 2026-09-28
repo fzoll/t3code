@@ -751,13 +751,26 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
               }),
           ),
         );
+        const callerEnv = { ...process.env, ...input.env };
+        const ghToken = callerEnv.GH_TOKEN ?? callerEnv.GITHUB_TOKEN;
+        const credentialEnv: NodeJS.ProcessEnv = ghToken
+          ? {
+              GIT_TERMINAL_PROMPT: "0",
+              GIT_CONFIG_COUNT: "2",
+              GIT_CONFIG_KEY_0: "credential.helper",
+              GIT_CONFIG_VALUE_0: "",
+              GIT_CONFIG_KEY_1: "credential.helper",
+              GIT_CONFIG_VALUE_1: '!f() { echo "password=$GH_TOKEN"; }; f',
+              GH_TOKEN: ghToken,
+            }
+          : {};
         const child = yield* commandSpawner
           .spawn(
             ChildProcess.make("git", commandInput.args, {
               cwd: commandInput.cwd,
               env: {
-                ...process.env,
-                ...input.env,
+                ...callerEnv,
+                ...credentialEnv,
                 ...trace2Monitor.env,
               },
             }),
@@ -817,6 +830,17 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         yield* trace2Monitor.flush;
 
         if (!input.allowNonZeroExit && exitCode !== 0) {
+          // Git echoes its own arguments back in error output, so stderr can
+          // carry an embedded credential from a remote URL. `GitCommandError`
+          // reaches clients and the persisted event log, so the raw text stays
+          // here in the server's debug log and never rides on the error.
+          yield* Effect.logDebug("Git command failed").pipe(
+            Effect.annotateLogs({
+              operation: commandInput.operation,
+              exitCode,
+              stderr: stderr.text.trim().slice(0, 2000),
+            }),
+          );
           return yield* new GitCommandError({
             ...gitCommandContext(commandInput),
             detail: "Git command exited with a non-zero status.",
@@ -901,14 +925,25 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         if (options.allowNonZeroExit || result.exitCode === 0) {
           return Effect.succeed(result);
         }
-        return Effect.fail(
-          new GitCommandError({
-            ...gitCommandContext({ operation, cwd, args }),
-            detail: options.fallbackErrorDetail ?? "Git command exited with a non-zero status.",
-            ...(result.exitCode === null ? {} : { exitCode: result.exitCode }),
-            stdoutLength: result.stdout.length,
-            stderrLength: result.stderr.length,
+        // Same reasoning as the non-zero exit path above: the raw stderr is
+        // debug-log-only, the error carries a stable detail.
+        return Effect.logDebug("Git command failed").pipe(
+          Effect.annotateLogs({
+            operation,
+            exitCode: result.exitCode,
+            stderr: result.stderr.trim().slice(0, 2000),
           }),
+          Effect.andThen(
+            Effect.fail(
+              new GitCommandError({
+                ...gitCommandContext({ operation, cwd, args }),
+                detail: options.fallbackErrorDetail ?? "Git command exited with a non-zero status.",
+                ...(result.exitCode === null ? {} : { exitCode: result.exitCode }),
+                stdoutLength: result.stdout.length,
+                stderrLength: result.stderr.length,
+              }),
+            ),
+          ),
         );
       }),
     );
@@ -3053,11 +3088,6 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       }),
     );
 
-    // `git worktree add` leaves submodules empty, so a repo that keeps agent
-    // skills, tooling or source in one gets a worktree that is quietly missing
-    // them. Best-effort: the objects are usually already in the parent's
-    // `.git/modules`, but a first-ever clone needs the network, and failing to
-    // populate a submodule must not roll back the caller's thread.
     const hasSubmodules = yield* fileSystem
       .exists(path.join(worktreePath, ".gitmodules"))
       .pipe(Effect.orElseSucceed(() => false));
@@ -3339,6 +3369,23 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     });
   });
 
+
+  const deleteBranch = Effect.fn("deleteBranch")(function* (input: {
+    readonly cwd: string;
+    readonly branch: string;
+    readonly force?: boolean | undefined;
+  }) {
+    yield* executeGit(
+      "GitVcsDriver.deleteBranch",
+      input.cwd,
+      ["branch", input.force ? "-D" : "-d", "--", input.branch],
+      {
+        timeoutMs: 10_000,
+        fallbackErrorDetail: "git branch delete failed",
+      },
+    );
+  });
+
   const renameBranch: GitVcsDriver.GitVcsDriver["Service"]["renameBranch"] = Effect.fn(
     "renameBranch",
   )(function* (input) {
@@ -3546,6 +3593,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     setBranchUpstream: (input) => withListRefsInvalidation(input.cwd, setBranchUpstream(input)),
     removeWorktree: (input) => withListRefsInvalidation(input.cwd, removeWorktree(input)),
     pruneWorktrees: (input) => withListRefsInvalidation(input.cwd, pruneWorktrees(input)),
+    deleteBranch: (input) => withListRefsInvalidation(input.cwd, deleteBranch(input)),
     renameBranch: (input) => withListRefsInvalidation(input.cwd, renameBranch(input)),
     createRef: (input) => withListRefsInvalidation(input.cwd, createRef(input)),
     switchRef: (input) => withListRefsInvalidation(input.cwd, switchRef(input)),

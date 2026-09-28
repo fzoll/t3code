@@ -339,6 +339,9 @@ export function projectEvent(
             faviconPath: payload.faviconPath ?? null,
             projectIcon: payload.projectIcon ?? null,
             scripts: payload.scripts,
+            environment: payload.environment,
+            isAuto: payload.isAuto,
+            group: payload.group,
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
             deletedAt: null,
@@ -381,6 +384,11 @@ export function projectEvent(
                     ? { projectIcon: payload.projectIcon }
                     : {}),
                   ...(payload.scripts !== undefined ? { scripts: payload.scripts } : {}),
+                  ...(payload.environment !== undefined
+                    ? { environment: payload.environment }
+                    : {}),
+                  ...(payload.isAuto !== undefined ? { isAuto: payload.isAuto } : {}),
+                  ...(payload.group !== undefined ? { group: payload.group } : {}),
                   updatedAt: payload.updatedAt,
                 }
               : project,

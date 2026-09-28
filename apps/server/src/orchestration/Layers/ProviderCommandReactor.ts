@@ -823,6 +823,9 @@ const make = Effect.gen(function* () {
           modelSelection: desiredModelSelection,
           ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
           runtimeMode: desiredRuntimeMode,
+          ...(project?.environment !== undefined && project.environment.length > 0
+            ? { projectEnvironment: project.environment }
+            : {}),
         })
         .pipe(Effect.tap(() => refreshWorkspaceSnapshot));
 

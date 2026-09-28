@@ -18,6 +18,8 @@ import {
   type GitPreparePullRequestThreadResult,
   type GitPullRequestRefInput,
   type VcsPullResult,
+  type VcsDeleteBranchInput,
+  type VcsPruneWorktreesInput,
   type VcsRemoveWorktreeInput,
   type GitResolvePullRequestResult,
   type GitRunStackedActionInput,
@@ -94,9 +96,10 @@ export class GitWorkflowService extends Context.Service<
     readonly removeWorktree: (
       input: VcsRemoveWorktreeInput,
     ) => Effect.Effect<void, GitCommandError>;
-    readonly pruneWorktrees: (input: {
-      readonly cwd: string;
-    }) => Effect.Effect<void, GitCommandError>;
+    readonly pruneWorktrees: (
+      input: VcsPruneWorktreesInput,
+    ) => Effect.Effect<void, GitCommandError>;
+    readonly deleteBranch: (input: VcsDeleteBranchInput) => Effect.Effect<void, GitCommandError>;
     readonly createRef: (
       input: VcsCreateRefInput,
     ) => Effect.Effect<VcsCreateRefResult, GitCommandError>;
@@ -365,6 +368,10 @@ export const make = Effect.gen(function* () {
     pruneWorktrees: (input) =>
       ensureGitCommand("GitWorkflowService.pruneWorktrees", input.cwd).pipe(
         Effect.andThen(git.pruneWorktrees(input)),
+      ),
+    deleteBranch: (input) =>
+      ensureGitCommand("GitWorkflowService.deleteBranch", input.cwd).pipe(
+        Effect.andThen(git.deleteBranch(input)),
       ),
     createRef: (input) =>
       ensureGitCommand("GitWorkflowService.createRef", input.cwd).pipe(

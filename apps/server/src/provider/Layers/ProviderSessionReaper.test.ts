@@ -213,6 +213,8 @@ describe("ProviderSessionReaper", () => {
           },
         });
       },
+      drain: () => Effect.void,
+      isDraining: Effect.succeed(false),
       rollbackConversation: () => unsupported(),
       uploadFeedback: () => unsupported(),
       streamEvents: Stream.empty,

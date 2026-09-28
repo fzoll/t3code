@@ -26,6 +26,8 @@ import {
   type VcsListRefsInput,
   type VcsListRefsResult,
   type VcsPullResult,
+  type VcsDeleteBranchInput,
+  type VcsPruneWorktreesInput,
   type VcsRemoveWorktreeInput,
   type VcsStatusInput,
   type VcsStatusResult,
@@ -321,10 +323,10 @@ export class GitVcsDriver extends Context.Service<
     readonly removeWorktree: (
       input: VcsRemoveWorktreeInput,
     ) => Effect.Effect<void, GitCommandError>;
-    /** Drops worktree admin entries whose directory is already gone (`git worktree prune`). */
-    readonly pruneWorktrees: (input: {
-      readonly cwd: string;
-    }) => Effect.Effect<void, GitCommandError>;
+    readonly pruneWorktrees: (
+      input: VcsPruneWorktreesInput,
+    ) => Effect.Effect<void, GitCommandError>;
+    readonly deleteBranch: (input: VcsDeleteBranchInput) => Effect.Effect<void, GitCommandError>;
     readonly renameBranch: (
       input: GitRenameBranchInput,
     ) => Effect.Effect<GitRenameBranchResult, GitCommandError>;

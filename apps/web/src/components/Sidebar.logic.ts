@@ -964,6 +964,7 @@ export function formatWorkingDurationLabel(elapsedMs: number): string {
 
 export function resolveThreadStatusPill(input: {
   thread: ThreadStatusInput;
+  isAutoProject?: boolean;
 }): ThreadStatusPill | null {
   const { thread } = input;
 
@@ -1041,7 +1042,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (hasUnseenCompletion(thread)) {
+  if (!input.isAutoProject && hasUnseenCompletion(thread)) {
     return {
       label: "Completed",
       colorClass: "text-emerald-600 dark:text-emerald-300/90",

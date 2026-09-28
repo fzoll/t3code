@@ -29,6 +29,9 @@ const makeProjectShell = (workspaceRoot: string): OrchestrationProjectShell => (
   workspaceRoot,
   defaultModelSelection: null,
   scripts: [],
+  environment: [],
+  isAuto: false,
+  group: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 });

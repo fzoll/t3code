@@ -4,6 +4,8 @@ import {
   CodexSettings,
   CursorSettings,
   GrokSettings,
+  JcodeSettings,
+  KimiSettings,
   OpenCodeSettings,
   ProviderDriverKind,
 } from "@t3tools/contracts";
@@ -13,6 +15,8 @@ import {
   ClaudeAI,
   CursorIcon,
   GrokIcon,
+  JcodeIcon,
+  KimiIcon,
   type Icon,
   OpenAI,
   OpenCodeIcon,
@@ -69,6 +73,20 @@ const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
     icon: GrokIcon,
     badgeLabel: "Early Access",
     settingsSchema: GrokSettings,
+  },
+  {
+    value: ProviderDriverKind.make("kimi"),
+    label: "Kimi",
+    icon: KimiIcon,
+    badgeLabel: "Early Access",
+    settingsSchema: KimiSettings,
+  },
+  {
+    value: ProviderDriverKind.make("jcode"),
+    label: "Jcode",
+    icon: JcodeIcon,
+    badgeLabel: "Early Access",
+    settingsSchema: JcodeSettings,
   },
   {
     value: ProviderDriverKind.make("opencode"),

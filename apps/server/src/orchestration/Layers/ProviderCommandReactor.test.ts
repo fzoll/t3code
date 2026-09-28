@@ -392,6 +392,8 @@ describe("ProviderCommandReactor", () => {
           },
         });
       },
+      drain: () => Effect.void,
+      isDraining: Effect.succeed(false),
       rollbackConversation: () => unsupported(),
       uploadFeedback: () => unsupported(),
       get streamEvents() {

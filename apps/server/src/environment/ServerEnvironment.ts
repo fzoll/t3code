@@ -218,7 +218,7 @@ export const make = Effect.gen(function* () {
   const desktopAppUpdate =
     serverSelfUpdate === "desktop-managed" && serverConfig.desktopTelemetryControlFd !== undefined;
 
-  const descriptor: ExecutionEnvironmentDescriptor = {
+  const baseDescriptor = {
     environmentId,
     label,
     platform: {
@@ -266,11 +266,12 @@ export const make = Effect.gen(function* () {
     getEnvironmentId: Effect.succeed(environmentId),
     // The publish opt-in and relay link change at runtime (`t3 connect
     // publish`, the client settings toggle), so the capability is read per
-    // descriptor request rather than baked in at startup.
+    // descriptor request rather than baked in at startup. Whole-host resource
+    // sampling lives in HostResources (serverGetHostResources), not here.
     getDescriptor: readAgentActivityPublishingActive(secrets).pipe(
-      Effect.map((agentActivityPublishing) => ({
-        ...descriptor,
-        capabilities: { ...descriptor.capabilities, agentActivityPublishing },
+      Effect.map((agentActivityPublishing): ExecutionEnvironmentDescriptor => ({
+        ...baseDescriptor,
+        capabilities: { ...baseDescriptor.capabilities, agentActivityPublishing },
       })),
     ),
   });
