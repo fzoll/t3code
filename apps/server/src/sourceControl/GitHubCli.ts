@@ -270,10 +270,9 @@ export class GitHubCli extends Context.Service<
       readonly cwd: string;
       readonly args: ReadonlyArray<string>;
       readonly timeoutMs?: number;
-      readonly env?: Record<string, string>;
+      readonly env?: NodeJS.ProcessEnv;
       /** Piped to the child's stdin, for payloads that must never appear in argv. */
       readonly stdin?: string;
-      readonly env?: NodeJS.ProcessEnv;
       readonly maxOutputBytes?: number;
     }) => Effect.Effect<VcsProcess.VcsProcessOutput, GitHubCliError>;
 

@@ -2357,6 +2357,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                   cursor: { enabled: false },
                   grok: { enabled: false },
                   opencode: { enabled: false },
+                  jcode: { enabled: false },
+                  kimi: { enabled: false },
                 },
               }),
             ),
@@ -2430,7 +2432,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               currentCodex?.status === "error" ? currentCodex : (yield* firstError)[0];
             assert.strictEqual(initialCodex?.status, "error");
             assert.strictEqual(initialCodex?.installed, false);
-            assert.deepStrictEqual(codexSpawns(), [firstMissing]);
+            assert.deepStrictEqual(spawnedCommands, [firstMissing]);
 
             const pendingRebuild = yield* Stream.toPull(
               codexSnapshots.pipe(

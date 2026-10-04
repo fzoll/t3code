@@ -16,32 +16,15 @@ import {
   RELAY_URL_SECRET,
 } from "../cloud/config.ts";
 import * as ServerConfig from "../config.ts";
-import * as HostResources from "../resourceTelemetry/HostResources.ts";
 import * as ServerEnvironment from "./ServerEnvironment.ts";
 
 const isServerEnvironmentIdPersistenceError = Schema.is(
   ServerEnvironment.ServerEnvironmentIdPersistenceError,
 );
 
-// The descriptor now sources memory from HostResources; these tests only assert
-// identity and capabilities, so a fixed snapshot keeps them off the real sampler.
-const stubHostResourcesLayer = Layer.succeed(
-  HostResources.HostResources,
-  HostResources.HostResources.of({
-    read: Effect.succeed({
-      sampledAt: 0,
-      cpuUtilization: null,
-      cpuCount: 1,
-      availableMemoryBytes: 0,
-      totalMemoryBytes: 0,
-    }),
-  }),
-);
-
 const makeServerEnvironmentLayer = (baseDir: string) =>
   ServerEnvironment.layer.pipe(
     Layer.provide(ServerSecretStore.layer),
-    Layer.provide(stubHostResourcesLayer),
     Layer.provide(ServerConfig.layerTest(process.cwd(), baseDir)),
   );
 
@@ -199,10 +182,7 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
         prefix: "t3-server-environment-publish-test-",
       });
       const testLayer = Layer.mergeAll(
-        ServerEnvironment.layer.pipe(
-          Layer.provide(ServerSecretStore.layer),
-          Layer.provide(stubHostResourcesLayer),
-        ),
+        ServerEnvironment.layer.pipe(Layer.provide(ServerSecretStore.layer)),
         ServerSecretStore.layer,
       ).pipe(Layer.provide(ServerConfig.layerTest(process.cwd(), baseDir)));
 
@@ -258,7 +238,6 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
           Effect.provide(
             ServerEnvironment.layer.pipe(
               Layer.provide(ServerSecretStore.layer),
-              Layer.provide(stubHostResourcesLayer),
               Layer.provide(ServerConfig.layer({ ...serverConfig, ...overrides })),
             ),
           ),
@@ -323,7 +302,6 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
           Effect.provide(
             ServerEnvironment.layer.pipe(
               Layer.provide(emptySecretStoreLayer),
-              Layer.provide(stubHostResourcesLayer),
               Layer.provide(Layer.merge(ServerConfig.layer(serverConfig), failingFileSystemLayer)),
             ),
           ),

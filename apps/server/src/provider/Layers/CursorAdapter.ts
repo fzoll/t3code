@@ -1250,11 +1250,6 @@ export function makeCursorAdapter(
       listSessions,
       hasSession,
       stopAll,
-      getSessionPid: (threadId) =>
-        Effect.sync(() => {
-          const ctx = sessions.get(threadId);
-          return ctx && !ctx.stopped ? ctx.acp.pid : null;
-        }),
       streamEvents,
     } satisfies CursorAdapterShape;
   });

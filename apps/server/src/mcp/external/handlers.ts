@@ -21,7 +21,7 @@ import { normalizeDispatchCommand } from "../../orchestration/Normalizer.ts";
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ProviderRegistry } from "../../provider/Services/ProviderRegistry.ts";
-import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import { HostResources } from "../../resourceTelemetry/HostResources.ts";
 import { ExternalDiagnosticsError, ExternalToolkit } from "./tools.ts";
 
 const requireScope = Effect.fn("ExternalToolkit.requireScope")(function* (
@@ -56,41 +56,21 @@ const handlers = {
     Effect.gen(function* () {
       yield* requireScope(AuthOrchestrationReadScope);
       const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
-      const providerService = yield* ProviderService;
-      const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
+      const hostResources = yield* HostResources;
       const descriptor = yield* serverEnvironment.getDescriptor.pipe(
         Effect.mapError(internalError("descriptor_failed")),
       );
-      const sessionPids = yield* providerService
-        .getSessionPids()
-        .pipe(Effect.orElseSucceed(() => []));
-      const rssByPid = new Map<number, number>();
-      if (sessionPids.length > 0) {
-        const diagnostics = yield* processDiagnostics.read.pipe(
-          Effect.orElseSucceed(() => ({ processes: [] })),
-        );
-        for (const row of diagnostics.processes) {
-          rssByPid.set(row.pid, row.rssBytes);
-        }
-      }
+      // Whole-host capacity comes from the shared HostResources snapshot
+      // (serverGetHostResources) so get_node_health and load balancing read the
+      // same numbers. `sampledAt` lets the reader enforce its freshness window.
+      const resources = yield* hostResources.read;
       return {
         environmentId: descriptor.environmentId,
         label: descriptor.label,
         version: descriptor.serverVersion,
         platform: { os: descriptor.platform.os, arch: descriptor.platform.arch },
         uptimeSeconds: Math.floor(process.uptime()),
-        // Descriptor memory is the shared HostResources snapshot (see
-        // ServerEnvironment); get_node_health reports the same kernel-aware
-        // numbers as the load-balancing hostResources RPC.
-        memory: {
-          freeMb: descriptor.resources?.freeMemoryMb ?? 0,
-          totalMb: descriptor.resources?.totalMemoryMb ?? 0,
-        },
-        sessions: sessionPids.map((session) => ({
-          threadId: String(session.threadId),
-          pid: session.pid,
-          rssBytes: rssByPid.get(session.pid) ?? 0,
-        })),
+        hostResources: resources,
       };
     }),
 

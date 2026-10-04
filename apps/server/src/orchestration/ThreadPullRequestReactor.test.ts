@@ -123,6 +123,9 @@ const project = {
   },
   defaultModelSelection: null,
   scripts: [],
+  environment: [],
+  isAuto: false,
+  group: null,
   createdAt: NOW,
   updatedAt: NOW,
 } satisfies OrchestrationProjectShell;

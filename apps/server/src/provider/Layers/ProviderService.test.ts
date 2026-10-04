@@ -294,7 +294,6 @@ function makeFakeCodexAdapter(
     hasSession,
     readThread,
     rollbackThread,
-    getSessionPid: () => Effect.succeed(null),
     ...(provider === CODEX_DRIVER ? { uploadFeedback } : {}),
     stopAll,
     get streamEvents() {

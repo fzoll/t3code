@@ -31,8 +31,6 @@ import { OtlpTracer } from "effect/unstable/observability";
 import * as ServerConfig from "./config.ts";
 
 import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
-import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
-import { ProviderService } from "./provider/Services/ProviderService.ts";
 import { statMediaFile, streamMediaFile, type OpenMediaFile } from "./assets/MediaFile.ts";
 import {
   ATTACHMENT_UPLOAD_ROUTE_PREFIX,
@@ -299,45 +297,11 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
   "metadata",
   Effect.fnUntraced(function* (handlers) {
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
-    const providerService = yield* ProviderService;
     return handlers.handle(
       "descriptor",
       Effect.fn("environment.metadata.descriptor")(function* (args) {
         yield* annotateEnvironmentRequest(args.endpoint.name);
-        const descriptor = yield* serverEnvironment.getDescriptor;
-        const sessionPids = yield* providerService
-          .getSessionPids()
-          .pipe(Effect.orElseSucceed(() => []));
-        if (sessionPids.length === 0) {
-          return descriptor;
-        }
-        const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
-        const diagnosticsResult = yield* processDiagnostics.read.pipe(
-          Effect.orElseSucceed(() => ({
-            processes: [] as Array<{ pid: number; rssBytes: number }>,
-          })),
-        );
-        const rssByPid = new Map<number, number>();
-        for (const row of diagnosticsResult.processes) {
-          rssByPid.set(row.pid, row.rssBytes);
-        }
-        const sessions = sessionPids.map((s) => ({
-          threadId: s.threadId,
-          pid: s.pid,
-          rssBytes: rssByPid.get(s.pid) ?? 0,
-        }));
-        return {
-          ...descriptor,
-          // Memory now comes from the shared HostResources snapshot baked into
-          // the descriptor by ServerEnvironment; this boundary only appends the
-          // per-thread session RSS the descriptor layer can't see.
-          resources: {
-            ...descriptor.resources,
-            freeMemoryMb: descriptor.resources?.freeMemoryMb ?? 0,
-            totalMemoryMb: descriptor.resources?.totalMemoryMb ?? 0,
-            sessions,
-          },
-        };
+        return yield* serverEnvironment.getDescriptor;
       }, traceRelayRequest),
     );
   }),
