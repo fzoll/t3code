@@ -23,7 +23,7 @@ interface KimiAcpRuntimeInput extends Omit<
   readonly environment?: NodeJS.ProcessEnv;
 }
 
-export function buildKimiAcpSpawnInput(
+function buildKimiAcpSpawnInput(
   kimiSettings: KimiAcpRuntimeKimiSettings | null | undefined,
   cwd: string,
   environment?: NodeJS.ProcessEnv,

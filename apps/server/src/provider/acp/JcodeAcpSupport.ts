@@ -24,7 +24,7 @@ interface JcodeAcpRuntimeInput extends Omit<
   readonly environment?: NodeJS.ProcessEnv;
 }
 
-export function buildJcodeAcpSpawnInput(
+function buildJcodeAcpSpawnInput(
   jcodeSettings: JcodeAcpRuntimeJcodeSettings | null | undefined,
   cwd: string,
   environment?: NodeJS.ProcessEnv,
