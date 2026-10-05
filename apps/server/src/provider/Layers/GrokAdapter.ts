@@ -114,6 +114,8 @@ export interface GrokAdapterLiveOptions {
   readonly turnInactivityTimeoutMs?: number;
   /** Override the longer active-tool liveness timeout in focused tests. */
   readonly activeToolInactivityTimeoutMs?: number;
+  /** Barrier for testing cancellation after a successful prompt, before settlement. */
+  readonly onPromptResponseReady?: Effect.Effect<void>;
 }
 
 interface PendingApproval {
@@ -1800,6 +1802,10 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
               mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
             ),
           );
+
+          if (options?.onPromptResponseReady) {
+            yield* options.onPromptResponseReady;
+          }
 
           return yield* withThreadLock(
             input.threadId,

@@ -181,7 +181,7 @@ function completedStopReasonFromPromptResponse(
   return response?.stopReason ?? null;
 }
 
-export function jcodePromptSettlementBelongsToContext(input: {
+function jcodePromptSettlementBelongsToContext(input: {
   readonly liveAcpSessionId: string;
   readonly expectedAcpSessionId: string;
   readonly liveActiveTurnId: TurnId | undefined;

@@ -71,7 +71,7 @@ export const ServerHealthResult = Schema.Struct({
   ),
 });
 
-export const ServerHealthTool = readonlyTool(
+const ServerHealthTool = readonlyTool(
   Tool.make("t3_server_health", {
     description:
       "Server health snapshot: environment identity, version, platform, uptime, memory, and active provider sessions with their process memory usage.",
@@ -81,7 +81,7 @@ export const ServerHealthTool = readonlyTool(
   }).annotate(Tool.Title, "T3 server health"),
 );
 
-export const ProvidersListTool = readonlyTool(
+const ProvidersListTool = readonlyTool(
   Tool.make("t3_providers_list", {
     description:
       "List configured provider instances with install status, CLI version, health, and available models.",
@@ -107,7 +107,7 @@ export const ThreadsListEntry = Schema.Struct({
   updatedAt: Schema.String,
 });
 
-export const ThreadsListTool = readonlyTool(
+const ThreadsListTool = readonlyTool(
   Tool.make("t3_threads_list", {
     description:
       "List threads with project, provider, model, run status, and pending approval/input flags. filter: 'active' returns only threads with a running turn; 'recent' (default) returns the most recently updated; 'all' returns everything including archived.",
@@ -121,7 +121,7 @@ export const ThreadsListTool = readonlyTool(
   }).annotate(Tool.Title, "List T3 threads"),
 );
 
-export const ThreadDetailTool = readonlyTool(
+const ThreadDetailTool = readonlyTool(
   Tool.make("t3_thread_detail", {
     description:
       "Detailed thread snapshot: turn history, messages, activities, checkpoints, pending approvals and user-input requests, session state, worktree path.",
@@ -138,7 +138,7 @@ export const ServerLogsResult = Schema.Struct({
   truncated: Schema.Boolean,
 });
 
-export const ServerLogsTool = readonlyTool(
+const ServerLogsTool = readonlyTool(
   Tool.make("t3_server_logs", {
     description:
       "Tail the server trace log (ndjson). Optionally filter lines by a case-sensitive regex pattern and/or a log level substring (e.g. 'WARN', 'ERROR'). Returns raw ndjson lines, newest last.",
@@ -153,7 +153,7 @@ export const ServerLogsTool = readonlyTool(
   }).annotate(Tool.Title, "T3 server logs"),
 );
 
-export const ServerDiagnosticsTool = readonlyTool(
+const ServerDiagnosticsTool = readonlyTool(
   Tool.make("t3_server_diagnostics", {
     description:
       "Process diagnostics for the server and its provider session children: pid, command, RSS memory, CPU, and elapsed time per process.",
@@ -171,7 +171,7 @@ export const MigrationsStatusResult = Schema.Struct({
   databaseSizeBytes: Schema.Int,
 });
 
-export const MigrationsStatusTool = readonlyTool(
+const MigrationsStatusTool = readonlyTool(
   Tool.make("t3_migrations_status", {
     description:
       "Database migration state: latest applied migration, total applied count, database path and size. Useful for post-rebase debugging.",
@@ -181,7 +181,7 @@ export const MigrationsStatusTool = readonlyTool(
   }).annotate(Tool.Title, "T3 migration status"),
 );
 
-export const ThreadInterruptTool = operateTool(
+const ThreadInterruptTool = operateTool(
   Tool.make("t3_thread_interrupt", {
     description:
       "Interrupt a running turn on a thread. Pass turnId to target a specific turn; omit it to interrupt the thread's active turn.",
@@ -195,7 +195,7 @@ export const ThreadInterruptTool = operateTool(
   }).annotate(Tool.Title, "Interrupt T3 thread turn"),
 );
 
-export const ThreadStopTool = operateTool(
+const ThreadStopTool = operateTool(
   Tool.make("t3_thread_stop", {
     description: "Stop the provider session backing a thread.",
     parameters: Schema.Struct({ threadId: ThreadId }),
@@ -205,7 +205,7 @@ export const ThreadStopTool = operateTool(
   }).annotate(Tool.Title, "Stop T3 thread session"),
 );
 
-export const ProvidersRefreshTool = operateTool(
+const ProvidersRefreshTool = operateTool(
   Tool.make("t3_providers_refresh", {
     description:
       "Force refresh provider status (re-probe CLI versions, re-discover models), then return the refreshed provider list.",
