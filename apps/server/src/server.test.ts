@@ -318,12 +318,29 @@ const testEnvironmentDescriptor = {
   capabilities: {
     repositoryIdentity: true,
   },
-  resources: {
-    freeMemoryMb: 1024,
-    totalMemoryMb: 2048,
-    sessionsKnown: true,
-    sessions: [],
-  },
+};
+
+// The HTTP `/.well-known/t3/environment` edge attaches `resources` to the bare
+// descriptor from the shared HostResources snapshot below, so cc_runner load
+// balancing reads the same memory numbers as the WS clients and external MCP.
+const TEST_HOST_RESOURCES = {
+  sampledAt: 1_700_000_000_000,
+  cpuUtilization: 0.25,
+  cpuCount: 8,
+  availableMemoryBytes: 1024 * 1024 * 1024,
+  totalMemoryBytes: 2048 * 1024 * 1024,
+};
+
+const expectedPublicDescriptorResources = {
+  freeMemoryMb: 1024,
+  totalMemoryMb: 2048,
+  sessionsKnown: true,
+  sessions: [] as ReadonlyArray<{ threadId: string; pid: number; rssBytes: number }>,
+};
+
+const expectedPublicDescriptor = {
+  ...testEnvironmentDescriptor,
+  resources: expectedPublicDescriptorResources,
 };
 const makeDefaultOrchestrationReadModel = () => {
   const now = "2026-01-01T00:00:00.000Z";
@@ -570,6 +587,7 @@ const buildAppUnderTest = (options?: {
     desktopTelemetryReceiver?: Partial<
       DesktopTelemetryReceiver.DesktopTelemetryReceiver["Service"]
     >;
+    hostResources?: Partial<HostResources.HostResources["Service"]>;
   };
 }) =>
   Effect.gen(function* () {
@@ -881,7 +899,10 @@ const buildAppUnderTest = (options?: {
         }),
       ),
       Layer.provide([
-        HostResources.layer,
+        Layer.mock(HostResources.HostResources)({
+          read: Effect.succeed(TEST_HOST_RESOURCES),
+          ...options?.layers?.hostResources,
+        }),
         Layer.mock(ProcessResourceMonitor.ProcessResourceMonitor)({
           readHistory: (input) =>
             Effect.succeed({
@@ -2137,10 +2158,10 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       const url = yield* getHttpServerUrl("/.well-known/t3/environment");
       const response = yield* fetchEffect(url);
-      const body = yield* responseJsonEffect<typeof testEnvironmentDescriptor>(response);
+      const body = yield* responseJsonEffect<typeof expectedPublicDescriptor>(response);
 
       assert.equal(response.status, 200);
-      assert.deepEqual(body, testEnvironmentDescriptor);
+      assert.deepEqual(body, expectedPublicDescriptor);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
@@ -2199,12 +2220,13 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           "accept-encoding": "gzip",
         },
       });
-      const body = yield* responseJsonEffect<typeof descriptor>(response);
+      const expected = { ...descriptor, resources: expectedPublicDescriptorResources };
+      const body = yield* responseJsonEffect<typeof expected>(response);
 
       assert.equal(response.status, 200);
       assert.equal(response.headers["content-encoding"], "gzip");
       assert.equal(response.headers.vary, "Accept-Encoding");
-      assert.deepEqual(body, descriptor);
+      assert.deepEqual(body, expected);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
@@ -2218,11 +2240,11 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           origin: crossOriginClientOrigin,
         },
       });
-      const body = yield* responseJsonEffect<typeof testEnvironmentDescriptor>(response);
+      const body = yield* responseJsonEffect<typeof expectedPublicDescriptor>(response);
 
       assert.equal(response.status, 200);
       assertBrowserApiCorsResponseHeaders(response.headers);
-      assert.deepEqual(body, testEnvironmentDescriptor);
+      assert.deepEqual(body, expectedPublicDescriptor);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

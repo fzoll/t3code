@@ -1,5 +1,6 @@
 import {
   EnvironmentAuthenticatedPrincipal,
+  HostResourcesSnapshot,
   ServerProcessDiagnosticsResult,
   ThreadId,
   TurnId,
@@ -17,6 +18,7 @@ import { OrchestrationEngineService } from "../../orchestration/Services/Orchest
 import { ProjectionSnapshotQuery } from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ProviderRegistry } from "../../provider/Services/ProviderRegistry.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import { HostResources } from "../../resourceTelemetry/HostResources.ts";
 import * as WorkspacePaths from "../../workspace/WorkspacePaths.ts";
 
 export class ExternalDiagnosticsError extends Schema.TaggedError<ExternalDiagnosticsError>()(
@@ -34,6 +36,7 @@ const dependencies = [
   ProviderService,
   ProviderRegistry,
   ProcessDiagnostics.ProcessDiagnostics,
+  HostResources,
   ProjectionSnapshotQuery,
   OrchestrationEngineService,
   FileSystem.FileSystem,
@@ -61,20 +64,13 @@ export const ServerHealthResult = Schema.Struct({
   version: Schema.String,
   platform: Schema.Struct({ os: Schema.String, arch: Schema.String }),
   uptimeSeconds: Schema.Int,
-  memory: Schema.Struct({ freeMb: Schema.Int, totalMb: Schema.Int }),
-  sessions: Schema.Array(
-    Schema.Struct({
-      threadId: Schema.String,
-      pid: Schema.Int,
-      rssBytes: Schema.Int,
-    }),
-  ),
+  hostResources: HostResourcesSnapshot,
 });
 
 const ServerHealthTool = readonlyTool(
   Tool.make("t3_server_health", {
     description:
-      "Server health snapshot: environment identity, version, platform, uptime, memory, and active provider sessions with their process memory usage.",
+      "Server health snapshot: environment identity, version, platform, uptime, and the whole-host resource sample (CPU, memory, sampledAt) shared with load balancing.",
     success: ServerHealthResult,
     failure: ExternalDiagnosticsError,
     dependencies,
