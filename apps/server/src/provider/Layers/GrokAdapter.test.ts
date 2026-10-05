@@ -1013,11 +1013,12 @@ it.layer(grokAdapterTestLayer)("GrokAdapterLive", (it) => {
           T3_ACP_EMIT_XAI_PROMPT_COMPLETE_THEN_HANG: "1",
         }),
       );
-      const adapter = yield* makeTestAdapter(wrapperPath);
-      const contentDelta = yield* Deferred.make<void>();
-      const runtimeEventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
-        event.type === "content.delta" ? Deferred.succeed(contentDelta, undefined) : Effect.void,
-      ).pipe(Effect.forkChild);
+      const promptResponseReady = yield* Deferred.make<void>();
+      const adapter = yield* makeTestAdapter(wrapperPath, {
+        onPromptResponseReady: Deferred.succeed(promptResponseReady, undefined).pipe(
+          Effect.andThen(Effect.never),
+        ),
+      });
 
       yield* adapter.startSession({
         threadId,
@@ -1035,20 +1036,15 @@ it.layer(grokAdapterTestLayer)("GrokAdapterLive", (it) => {
         })
         .pipe(Effect.forkChild);
 
-      yield* Deferred.await(contentDelta);
-      for (let yieldAttempt = 0; yieldAttempt < 6; yieldAttempt += 1) {
-        yield* Effect.yieldNow;
-      }
+      // The result is recorded, but normal transcript settlement is held at the
+      // barrier. Interrupt must retain it through the sendTurn finalizer.
+      yield* Deferred.await(promptResponseReady);
       yield* Fiber.interrupt(sendTurnFiber);
-      for (let yieldAttempt = 0; yieldAttempt < 4; yieldAttempt += 1) {
-        yield* Effect.yieldNow;
-      }
 
       const snapshot = yield* adapter.readThread(threadId);
       assert.equal(snapshot.turns.length, 1);
       assert.equal(snapshot.turns[0]?.items.length, 1);
 
-      yield* Fiber.interrupt(runtimeEventsFiber);
       yield* adapter.stopSession(threadId);
     }),
   );

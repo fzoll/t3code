@@ -3369,7 +3369,6 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     });
   });
 
-
   const deleteBranch = Effect.fn("deleteBranch")(function* (input: {
     readonly cwd: string;
     readonly branch: string;
