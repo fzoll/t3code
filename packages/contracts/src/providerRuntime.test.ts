@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema";
 
 import {
   classifyTaskAgentKind,
+  ProviderAuthEvidence,
   ProviderRuntimeEvent,
   type ProviderRuntimeEventType,
 } from "./providerRuntime.ts";
@@ -254,4 +255,32 @@ describe("classifyTaskAgentKind", () => {
     // Nested agent: outlives its parent, stays in the roster.
     expect(classifyTaskAgentKind({ taskType: "local_agent", agentId: "owner" })).toBe("agent");
   });
+});
+
+it("rejects contradictory provider authentication evidence", () => {
+  const decode = Schema.decodeUnknownSync(ProviderAuthEvidence);
+  expect(() =>
+    decode({
+      status: "ready",
+      reasonCode: "provider_login_required",
+      evidenceSource: "provider_success",
+      providerSessionId: "session",
+    }),
+  ).toThrow();
+  expect(() =>
+    decode({
+      status: "auth_required",
+      reasonCode: "provider_login_required",
+      evidenceSource: "provider_error",
+      providerSessionId: " ",
+    }),
+  ).toThrow();
+  expect(() =>
+    decode({
+      status: "quota",
+      reasonCode: "provider_login_required",
+      evidenceSource: "provider_error",
+      providerSessionId: "session",
+    }),
+  ).toThrow();
 });

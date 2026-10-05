@@ -397,8 +397,36 @@ export const TurnTokenUsage = Schema.Union([
 ]);
 export type TurnTokenUsage = typeof TurnTokenUsage.Type;
 
+/** Machine-readable provider evidence; never contains provider error text or credentials. */
+export const ProviderAuthEvidence = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("auth_required"),
+    reasonCode: Schema.Literals([
+      "provider_login_required",
+      "provider_oauth_session_expired",
+      "provider_refresh_rejected",
+    ]),
+    evidenceSource: Schema.Literal("provider_error"),
+    providerSessionId: TrimmedNonEmptyStringSchema,
+  }),
+  Schema.Struct({
+    status: Schema.Literal("quota"),
+    reasonCode: Schema.Literals(["provider_quota_exhausted", "provider_rate_limited"]),
+    evidenceSource: Schema.Literal("provider_error"),
+    providerSessionId: TrimmedNonEmptyStringSchema,
+  }),
+  Schema.Struct({
+    status: Schema.Literal("ready"),
+    reasonCode: Schema.Literal("provider_authenticated"),
+    evidenceSource: Schema.Literal("provider_success"),
+    providerSessionId: TrimmedNonEmptyStringSchema,
+  }),
+]);
+export type ProviderAuthEvidence = typeof ProviderAuthEvidence.Type;
+
 const TurnCompletedPayload = Schema.Struct({
   state: RuntimeTurnState,
+  providerAuthEvidence: Schema.optional(ProviderAuthEvidence),
   stopReason: Schema.optional(Schema.NullOr(TrimmedNonEmptyStringSchema)),
   usage: Schema.optional(Schema.Unknown),
   modelUsage: Schema.optional(UnknownRecordSchema),

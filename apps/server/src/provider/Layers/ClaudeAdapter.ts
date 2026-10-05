@@ -8,6 +8,7 @@
  * @module ClaudeAdapterLive
  */
 import * as NodeChildProcess from "node:child_process";
+import { claudeProviderAuthEvidence } from "./claudeProviderAuthEvidence.ts";
 import {
   type CanUseTool,
   query,
@@ -2642,6 +2643,15 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       rawPayload: result ?? { status },
     });
 
+    const providerAuthEvidence = claudeProviderAuthEvidence({
+      status,
+      result,
+      errorMessage,
+      authenticationFailureMessage: turnState.authenticationFailureMessage,
+      rateLimited:
+        turnState.rejectedRateLimitTypes.size > 0 || turnState.latestAssistantRateLimited,
+      providerSessionId: context.resumeSessionId,
+    });
     const stamp = yield* makeEventStamp();
     yield* offerRuntimeEvent({
       type: "turn.completed",
@@ -2652,6 +2662,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       turnId: turnState.turnId,
       payload: {
         state: status,
+        ...(providerAuthEvidence ? { providerAuthEvidence } : {}),
         ...(result?.stop_reason !== undefined ? { stopReason: result.stop_reason } : {}),
         ...(result?.usage ? { usage: result.usage } : {}),
         ...(result?.modelUsage ? { modelUsage: result.modelUsage } : {}),
