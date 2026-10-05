@@ -1,7 +1,7 @@
 export interface CategorizedProject {
   readonly group?: string | null;
 }
-export function categoryPath(group: string | null | undefined): string {
+function categoryPath(group: string | null | undefined): string {
   return (group ?? "")
     .split("/")
     .map((part) => part.trim())

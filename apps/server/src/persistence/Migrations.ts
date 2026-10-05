@@ -176,23 +176,33 @@ export interface RunMigrationsOptions {
 export const runMigrations = Effect.fn("runMigrations")(function* ({
   toMigrationInclusive,
 }: RunMigrationsOptions = {}) {
-  // Pre-migrator reconciliation for fork databases. The fork recorded its own
-  // migrations under ids 41-44; upstream later shipped different migrations
-  // under those same ids. The id-ordered migrator treats them as applied and
-  // skips upstream's 41-44, yet later upstream migrations (e.g. id 50) read the
-  // columns those add (linked_pull_request_json, unsettled_at, ...). Running
-  // the four idempotent upstream migrations here — before the ordered run —
-  // closes the gap regardless of ordering. Gated on an established database so
-  // it is a no-op on fresh installs (the ordered migrator builds those cleanly).
+  // Fork releases used upstream's slots 37-39 and 41-44. Repair only
+  // recorded collisions, before later migrations depend on those columns.
+  // A partially migrated upstream database must not run future migrations.
   const sql = yield* SqlClient.SqlClient;
   const established = yield* sql<{ readonly name: string }>`
-    SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projection_threads'
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'effect_sql_migrations'
   `;
   if (established.length > 0) {
-    yield* Migration0041;
-    yield* Migration0042;
-    yield* Migration0043;
-    yield* Migration0044;
+    const applied = yield* sql<{ readonly migration_id: number; readonly name: string }>`
+      SELECT migration_id, name FROM effect_sql_migrations
+    `;
+    const forkNames = new Set([
+      "ProjectEnvironment",
+      "ProjectIsAuto",
+      "ProjectGroup",
+      "ReconcileRenumberedForkMigrations",
+    ]);
+    for (const [id, name, migration] of migrationEntries) {
+      if (toMigrationInclusive !== undefined && id > toMigrationInclusive) continue;
+      if (
+        applied.some(
+          (row) => row.migration_id === id && row.name !== name && forkNames.has(row.name),
+        )
+      ) {
+        yield* migration;
+      }
+    }
   }
 
   const executedMigrations = yield* run({ loader: makeMigrationLoader(toMigrationInclusive) });

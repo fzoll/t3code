@@ -2398,47 +2398,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     yield* analytics.flush;
   });
 
-  const drainThenStopAll = Effect.gen(function* () {
-    const isDraining = yield* Ref.get(drainingRef);
-    if (!isDraining) {
-      yield* Ref.set(drainingRef, true);
-      const currentAdapters = yield* getAdapterEntries;
-      const allSessions = yield* Effect.forEach(currentAdapters, ([, adapter]) =>
-        adapter.listSessions(),
-      ).pipe(Effect.map((groups) => groups.flatMap((s) => s)));
-      const running = allSessions.filter(
-        (s) => s.status === "running" || s.status === "connecting",
-      );
-      if (running.length > 0) {
-        yield* Effect.logInfo(
-          `Graceful shutdown: waiting for ${running.length} active session(s) to finish...`,
-        );
-        const deadline = (yield* Clock.currentTimeMillis) + 2 * 60 * 60 * 1000;
-        let remaining = running.length;
-        while (remaining > 0 && (yield* Clock.currentTimeMillis) < deadline) {
-          yield* Effect.sleep(5_000);
-          const adapters = yield* getAdapterEntries;
-          const sessions = yield* Effect.forEach(adapters, ([, adapter]) =>
-            adapter.listSessions(),
-          ).pipe(Effect.map((groups) => groups.flatMap((s) => s)));
-          remaining = sessions.filter(
-            (s) => s.status === "running" || s.status === "connecting",
-          ).length;
-        }
-        if (remaining > 0) {
-          yield* Effect.logWarning(
-            `Graceful shutdown timeout: ${remaining} session(s) still running, forcing stop.`,
-          );
-        } else {
-          yield* Effect.logInfo("Graceful shutdown: all sessions completed.");
-        }
-      }
-    }
-    yield* runStopAll();
-  });
-
+  // Draining is an explicit pre-shutdown operation. Scope finalization must
+  // persist recovery markers and stop providers before the service manager's
+  // kill deadline, even when a turn will never complete on its own.
   yield* Effect.addFinalizer(() =>
-    drainThenStopAll.pipe(
+    runStopAll().pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("failed to stop provider service", {
           errorTag: causeErrorTag(cause),
