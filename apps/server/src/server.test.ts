@@ -318,6 +318,12 @@ const testEnvironmentDescriptor = {
   capabilities: {
     repositoryIdentity: true,
   },
+  resources: {
+    freeMemoryMb: 1024,
+    totalMemoryMb: 2048,
+    sessionsKnown: true,
+    sessions: [],
+  },
 };
 const makeDefaultOrchestrationReadModel = () => {
   const now = "2026-01-01T00:00:00.000Z";
@@ -802,6 +808,7 @@ const buildAppUnderTest = (options?: {
             ...options?.layers?.providerRegistry,
           }),
           Layer.mock(ProviderService.ProviderService)({
+            getSessionPids: () => Effect.succeed([]),
             uploadFeedback: () => Effect.die("Provider feedback is not stubbed in this test"),
             ...options?.layers?.providerService,
           }),
@@ -850,11 +857,6 @@ const buildAppUnderTest = (options?: {
           }),
           Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({
             resolveTargets: () => Effect.succeed([]),
-          }),
-          // The environment descriptor route annotates per-thread session
-          // PIDs; no test here drives live provider sessions.
-          Layer.mock(ProviderService.ProviderService)({
-            getSessionPids: () => Effect.succeed([]),
           }),
         ),
       ),
