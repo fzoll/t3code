@@ -193,6 +193,31 @@ export async function fetchSessionState(): Promise<AuthSessionState> {
   });
 }
 
+/** Keep an open browser paired without changing bearer/desktop remote credentials. */
+export function maintainBrowserSession(): () => void {
+  let stopped = false;
+  let inFlight = false;
+  const refresh = async () => {
+    if (stopped || inFlight) return;
+    inFlight = true;
+    try {
+      const session = await fetchSessionState();
+      if (!stopped && !session.authenticated) resolvedAuthenticatedGateState = null;
+    } catch {
+      // A temporary offline server must not destroy a valid browser session.
+    } finally {
+      inFlight = false;
+    }
+  };
+  const timer = setInterval(() => void refresh(), 60 * 60 * 1_000);
+  window.addEventListener("focus", refresh);
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+    window.removeEventListener("focus", refresh);
+  };
+}
+
 function readHttpApiStatus(error: unknown): number | null {
   if (isEnvironmentHttpCommonError(error)) {
     return readEnvironmentHttpErrorStatus(error);

@@ -380,6 +380,9 @@ export class SessionStore extends Context.Service<
        */
       readonly replaceActiveForSubjectAndMethod?: boolean;
     }) => Effect.Effect<IssuedSession, SessionCredentialInternalError>;
+    readonly renewBrowser: (
+      token: string,
+    ) => Effect.Effect<Option.Option<IssuedSession>, SessionCredentialError>;
     readonly verify: (token: string) => Effect.Effect<VerifiedSession, SessionCredentialError>;
     readonly issueWebSocketToken: (
       sessionId: AuthSessionId,
@@ -844,6 +847,56 @@ export const make = Effect.gen(function* () {
   );
 
   const encodeWsClaims = Schema.encodeEffect(Schema.fromJsonString(WebSocketClaims));
+  // Renew only a still-valid browser credential, retaining its session identity so
+  // revocation and connected WebSocket ownership continue to target the same client.
+  const renewBrowser: SessionStore["Service"]["renewBrowser"] = Effect.fn(
+    "SessionStore.renewBrowser",
+  )(function* (token) {
+    const session = yield* verify(token);
+    const now = yield* DateTime.now;
+    if (
+      session.method !== "browser-session-cookie" ||
+      devAuth?.matches(token) ||
+      !session.expiresAt ||
+      session.expiresAt.epochMilliseconds <= now.epochMilliseconds ||
+      session.expiresAt.epochMilliseconds - now.epochMilliseconds >
+        Duration.toMillis(Duration.days(7))
+    ) {
+      return Option.none();
+    }
+    const expiresAt = DateTime.add(now, { milliseconds: Duration.toMillis(DEFAULT_SESSION_TTL) });
+    const renewed = yield* authSessions
+      .renewBrowser({ sessionId: session.sessionId, now, expiresAt })
+      .pipe(
+        Effect.mapError(
+          (cause) => new SessionCredentialIssueError({ sessionId: session.sessionId, cause }),
+        ),
+      );
+    if (!renewed) return Option.none(); // A concurrent revoke/expiry must never be resurrected.
+    const claims: SessionClaims = {
+      v: 1,
+      kind: "session",
+      sid: session.sessionId,
+      sub: session.subject,
+      scopes: session.scopes,
+      method: session.method,
+      ...(session.proofKeyThumbprint ? { jkt: session.proofKeyThumbprint } : {}),
+      iat: now.epochMilliseconds,
+      exp: expiresAt.epochMilliseconds,
+    };
+    const payload = yield* encodeClaims(claims).pipe(
+      Effect.map(base64UrlEncode),
+      Effect.mapError(
+        (cause) => new SessionCredentialIssueError({ sessionId: session.sessionId, cause }),
+      ),
+    );
+    return Option.some({
+      ...session,
+      expiresAt,
+      token: `${payload}.${signPayload(payload, signingSecret)}`,
+    });
+  });
+
   const issueWebSocketToken: SessionStore["Service"]["issueWebSocketToken"] = Effect.fn(
     "SessionStore.issueWebSocketToken",
   )(function* (sessionId, input) {
@@ -1035,6 +1088,7 @@ export const make = Effect.gen(function* () {
     cookieName,
     legacyCookieName,
     issue,
+    renewBrowser,
     verify,
     issueWebSocketToken,
     verifyWebSocketToken,

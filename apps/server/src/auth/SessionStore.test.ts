@@ -91,6 +91,7 @@ const repositoryFailure = new PersistenceSqlError({
 });
 
 const failingSessionLookupRepositoryLayer = Layer.succeed(AuthSessions.AuthSessionRepository, {
+  renewBrowser: () => Effect.succeed(false),
   create: () => Effect.void,
   createReplacingActive: () => Effect.succeed([]),
   createIfAbsent: () => Effect.void,
@@ -114,6 +115,67 @@ const failingSessionLookupCredentialLayer = Layer.effect(
 );
 
 it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
+  it.effect("renews active browser cookies without changing identity or revocation", () =>
+    Effect.gen(function* () {
+      const store = yield* SessionStore.SessionStore;
+      const issued = yield* store.issue();
+      expect(Option.isNone(yield* store.renewBrowser(issued.token))).toBe(true);
+      yield* TestClock.adjust(Duration.days(24));
+      const concurrent = yield* Effect.all(
+        [store.renewBrowser(issued.token), store.renewBrowser(issued.token)],
+        { concurrency: "unbounded" },
+      );
+      const renewed = Option.getOrThrow(concurrent[0]);
+      expect(Option.getOrThrow(concurrent[1]).token).toBe(renewed.token);
+      expect(yield* store.listActive()).toHaveLength(1);
+      expect(renewed.sessionId).toBe(issued.sessionId);
+      expect(renewed.scopes).toEqual(issued.scopes);
+      expect(renewed.expiresAt.epochMilliseconds).toBe(
+        issued.expiresAt.epochMilliseconds + Duration.toMillis(Duration.days(24)),
+      );
+      yield* TestClock.adjust(Duration.days(7));
+      expect((yield* Effect.flip(store.verify(issued.token)))._tag).toBe(
+        "SessionTokenExpiredError",
+      );
+      expect((yield* store.verify(renewed.token)).sessionId).toBe(issued.sessionId);
+      yield* store.revoke(issued.sessionId);
+      expect((yield* Effect.flip(store.verify(renewed.token)))._tag).toBe(
+        "SessionTokenRevokedError",
+      );
+      expect((yield* Effect.flip(store.renewBrowser(renewed.token)))._tag).toBe(
+        "SessionTokenRevokedError",
+      );
+    }).pipe(Effect.provide(makeSessionStoreLayer())),
+  );
+
+  it.effect("preserves a browser credential proof-key binding during renewal", () =>
+    Effect.gen(function* () {
+      const store = yield* SessionStore.SessionStore;
+      const issued = yield* store.issue({ proofKeyThumbprint: "browser-proof-key" });
+      yield* TestClock.adjust(Duration.days(24));
+      const renewed = Option.getOrThrow(yield* store.renewBrowser(issued.token));
+      expect((yield* store.verify(renewed.token)).proofKeyThumbprint).toBe("browser-proof-key");
+    }).pipe(Effect.provide(makeSessionStoreLayer())),
+  );
+
+  it.effect("never renews expired cookies or bearer access credentials", () =>
+    Effect.gen(function* () {
+      const store = yield* SessionStore.SessionStore;
+      const inactive = yield* store.issue();
+      const cookie = yield* store.issue({ ttl: Duration.days(1) });
+      const bearer = yield* store.issue({ method: "bearer-access-token", ttl: Duration.days(2) });
+      expect(Option.isNone(yield* store.renewBrowser(bearer.token))).toBe(true);
+      yield* TestClock.adjust(Duration.days(1));
+      expect((yield* Effect.flip(store.renewBrowser(cookie.token)))._tag).toBe(
+        "SessionTokenExpiredError",
+      );
+      yield* TestClock.adjust(Duration.days(30));
+      expect((yield* Effect.flip(store.renewBrowser(inactive.token)))._tag).toBe(
+        "SessionTokenExpiredError",
+      );
+    }).pipe(Effect.provide(makeSessionStoreLayer())),
+  );
+
   it.effect("keys remote cookies by environment identity instead of state directory", () =>
     Effect.gen(function* () {
       const cookieName = (stateDir: string, environmentId: EnvironmentId) =>
@@ -132,6 +194,34 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
 
       expect(moved).toBe(original);
       expect(other).not.toBe(original);
+    }),
+  );
+
+  it.effect("keeps renewed cookies and their revocation across store restarts", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const base = yield* fs.makeTempDirectoryScoped({ prefix: "t3-browser-renewal-" });
+      const initial = yield* makeDiskSessionStoreLayer(base);
+      const renewed = yield* Effect.gen(function* () {
+        const store = yield* SessionStore.SessionStore;
+        const session = yield* store.issue();
+        yield* TestClock.adjust(Duration.days(24));
+        return Option.getOrThrow(yield* store.renewBrowser(session.token));
+      }).pipe(Effect.provide(initial), Effect.scoped);
+      yield* TestClock.adjust(Duration.days(7));
+      const reopened = yield* makeDiskSessionStoreLayer(base);
+      yield* Effect.gen(function* () {
+        const store = yield* SessionStore.SessionStore;
+        expect((yield* store.verify(renewed.token)).sessionId).toBe(renewed.sessionId);
+        yield* store.revoke(renewed.sessionId);
+      }).pipe(Effect.provide(reopened), Effect.scoped);
+      const revoked = yield* makeDiskSessionStoreLayer(base);
+      yield* Effect.gen(function* () {
+        const store = yield* SessionStore.SessionStore;
+        expect((yield* Effect.flip(store.renewBrowser(renewed.token)))._tag).toBe(
+          "SessionTokenRevokedError",
+        );
+      }).pipe(Effect.provide(revoked), Effect.scoped);
     }),
   );
 

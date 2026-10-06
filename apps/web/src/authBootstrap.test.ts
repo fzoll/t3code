@@ -136,6 +136,24 @@ describe("resolveInitialServerAuthGateState", () => {
     vi.restoreAllMocks();
   });
 
+  it("refreshes an open browser hourly and stops after unmount", async () => {
+    const target = new EventTarget();
+    Object.assign(window, {
+      addEventListener: target.addEventListener.bind(target),
+      removeEventListener: target.removeEventListener.bind(target),
+    });
+    const api = await installAuthApi({ session: () => authenticatedSession(LOOPBACK_AUTH) });
+    const { maintainBrowserSession } = await import("./environments/primary/auth");
+    vi.useFakeTimers();
+    const stop = maintainBrowserSession();
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1_000);
+    expect(api.calls.session).toBe(1);
+    stop();
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1_000);
+    target.dispatchEvent(new Event("focus"));
+    expect(api.calls.session).toBe(1);
+  });
+
   it("reuses an in-flight silent bootstrap attempt", async () => {
     const nextSession = sequence(
       unauthenticatedSession(DESKTOP_AUTH),

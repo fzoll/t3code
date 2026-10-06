@@ -1,3 +1,5 @@
+import * as Clock from "effect/Clock";
+import * as TestClock from "effect/testing/TestClock";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { EnvironmentHttpApi } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
@@ -68,6 +70,7 @@ const postJson = (path: string, body: unknown, headers?: Readonly<Record<string,
 it.effect("sets the selected browser session cookies through the HTTP route", () =>
   Effect.gen(function* () {
     const crypto = yield* Crypto.Crypto;
+    const testClock = yield* TestClock.testClockWith(Effect.succeed);
     const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
       get: () => Effect.succeed(Option.none()),
       set: () => Effect.void,
@@ -77,6 +80,7 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
     });
     const requestContext = Context.make(Crypto.Crypto, crypto).pipe(
       Context.add(ServerSecretStore.ServerSecretStore, unusedSecretStore),
+      Context.add(Clock.Clock, testClock),
     );
     return yield* Effect.acquireUseRelease(
       Effect.sync(
@@ -87,10 +91,12 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           ] as const,
       ),
       ([environmentA, environmentB]) =>
-        Effect.tryPromise(async () => {
-          const devResponse = await environmentA.handler(
-            postJson("/api/auth/browser-session", { credential: DEV_TOKEN }),
-            requestContext,
+        Effect.gen(function* () {
+          const devResponse = yield* Effect.promise(() =>
+            environmentA.handler(
+              postJson("/api/auth/browser-session", { credential: DEV_TOKEN }),
+              requestContext,
+            ),
           );
           expect(devResponse.status).toBe(200);
           const devCookies = devResponse.headers.getSetCookie();
@@ -101,34 +107,72 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
             expect.stringMatching(/^t3_session_[^=]*=;.*Max-Age=0/),
           );
           const devCookieHeader = devCookie?.split(";", 1)[0] ?? "";
-          const environmentBSession = await environmentB.handler(
-            new Request("http://127.0.0.1/api/auth/session", {
-              headers: { cookie: devCookieHeader },
-            }),
-            requestContext,
+          const environmentBSession = yield* Effect.promise(() =>
+            environmentB.handler(
+              new Request("http://127.0.0.1/api/auth/session", {
+                headers: { cookie: devCookieHeader },
+              }),
+              requestContext,
+            ),
           );
           expect(environmentBSession.status).toBe(200);
-          expect(await environmentBSession.json()).toMatchObject({ authenticated: true });
+          expect(yield* Effect.promise(() => environmentBSession.json())).toMatchObject({
+            authenticated: true,
+          });
 
-          const pairingResponse = await environmentA.handler(
-            postJson(
-              "/api/auth/pairing-token",
-              { scopes: ["orchestration:read"] },
-              { cookie: devCookieHeader },
+          const pairingResponse = yield* Effect.promise(() =>
+            environmentA.handler(
+              postJson(
+                "/api/auth/pairing-token",
+                { scopes: ["orchestration:read"] },
+                { cookie: devCookieHeader },
+              ),
+              requestContext,
             ),
-            requestContext,
           );
           expect(pairingResponse.status).toBe(200);
-          const pairing = (await pairingResponse.json()) as { credential: string };
-          const restrictedResponse = await environmentA.handler(
-            postJson("/api/auth/browser-session", { credential: pairing.credential }),
-            requestContext,
+          const pairing = (yield* Effect.promise(() => pairingResponse.json())) as {
+            credential: string;
+          };
+          const restrictedResponse = yield* Effect.promise(() =>
+            environmentA.handler(
+              postJson("/api/auth/browser-session", { credential: pairing.credential }),
+              requestContext,
+            ),
           );
           expect(restrictedResponse.status).toBe(200);
           const restrictedCookies = restrictedResponse.headers.getSetCookie();
           expect(restrictedCookies).toHaveLength(1);
           expect(restrictedCookies[0]).toMatch(/^t3_session_/);
           expect(restrictedCookies[0]).not.toContain("t3_dev_session_");
+          const originalCookie = restrictedCookies[0]?.split(";", 1)[0] ?? "";
+          yield* testClock.adjust("24 days");
+          const renewedResponse = yield* Effect.promise(() =>
+            environmentA.handler(
+              new Request("http://127.0.0.1/api/auth/session", {
+                headers: { cookie: originalCookie },
+              }),
+              requestContext,
+            ),
+          );
+          expect(renewedResponse.status).toBe(200);
+          const renewedCookie = renewedResponse.headers.getSetCookie()[0];
+          expect(renewedCookie).toContain("HttpOnly");
+          expect(renewedCookie).toContain("SameSite=Lax");
+          expect(renewedCookie?.split(";", 1)[0]).not.toBe(originalCookie);
+          expect(yield* Effect.promise(() => renewedResponse.json())).toMatchObject({
+            authenticated: true,
+            scopes: ["orchestration:read"],
+          });
+          const replay = yield* Effect.promise(() =>
+            environmentA.handler(
+              new Request("http://127.0.0.1/api/auth/session", {
+                headers: { cookie: renewedCookie?.split(";", 1)[0] ?? "" },
+              }),
+              requestContext,
+            ),
+          );
+          expect(replay.headers.getSetCookie()).toEqual([]);
         }),
       ([environmentA, environmentB]) =>
         Effect.promise(() => Promise.all([environmentA.dispose(), environmentB.dispose()])),
