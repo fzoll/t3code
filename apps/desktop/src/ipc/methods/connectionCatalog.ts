@@ -26,6 +26,19 @@ export const setConnectionCatalog = DesktopIpc.makeIpcMethod({
   }),
 });
 
+export const compareConnectionCatalog = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.COMPARE_CONNECTION_CATALOG_CHANNEL,
+  payload: Schema.Struct({ expected: Schema.NullOr(Schema.String), catalog: Schema.String }),
+  result: Schema.Boolean,
+  handler: Effect.fn("desktop.ipc.connectionCatalog.compareAndSet")(function* ({
+    expected,
+    catalog,
+  }) {
+    const store = yield* DesktopConnectionCatalogStore.DesktopConnectionCatalogStore;
+    return yield* store.compareAndSet(expected, catalog);
+  }),
+});
+
 export const clearConnectionCatalog = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.CLEAR_CONNECTION_CATALOG_CHANNEL,
   payload: Schema.Void,

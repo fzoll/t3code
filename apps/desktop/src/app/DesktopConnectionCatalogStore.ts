@@ -21,6 +21,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import * as DesktopSavedEnvironments from "../settings/DesktopSavedEnvironments.ts";
@@ -162,6 +163,18 @@ export class DesktopConnectionCatalogStore extends Context.Service<
     ) => Effect.Effect<
       boolean,
       DesktopConnectionCatalogStoreWriteError | DesktopConnectionCatalogStoreProtectionError
+    >;
+    readonly compareAndSet: (
+      expected: string | null,
+      catalog: string,
+    ) => Effect.Effect<
+      boolean,
+      | DesktopConnectionCatalogStoreReadError
+      | DesktopConnectionCatalogStoreDocumentDecodeError
+      | DesktopConnectionCatalogStoreDecodeError
+      | DesktopConnectionCatalogStoreMigrationError
+      | DesktopConnectionCatalogStoreProtectionError
+      | DesktopConnectionCatalogStoreWriteError
     >;
     readonly clear: Effect.Effect<void>;
   }
@@ -471,7 +484,8 @@ export const make = Effect.gen(function* () {
     return Option.some(encoded);
   });
 
-  return DesktopConnectionCatalogStore.of({
+  const lock = yield* Semaphore.make(1);
+  const store: Omit<DesktopConnectionCatalogStore["Service"], "compareAndSet"> = {
     get: Effect.gen(function* () {
       const document = yield* readDocument(fileSystem, catalogPath);
       if (Option.isNone(document)) {
@@ -512,6 +526,18 @@ export const make = Effect.gen(function* () {
       ),
       Effect.withSpan("desktop.connectionCatalogStore.clear"),
     ),
+  };
+  return DesktopConnectionCatalogStore.of({
+    get: lock.withPermits(1)(store.get),
+    set: (catalog) => lock.withPermits(1)(store.set(catalog)),
+    clear: lock.withPermits(1)(store.clear),
+    compareAndSet: (expected, catalog) =>
+      lock.withPermits(1)(
+        Effect.gen(function* () {
+          if (Option.getOrNull(yield* store.get) !== expected) return false;
+          return yield* store.set(catalog);
+        }),
+      ),
   });
 });
 
