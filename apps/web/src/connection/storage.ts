@@ -15,6 +15,7 @@ import {
 } from "@t3tools/client-runtime/platform";
 import { TokenStore } from "@t3tools/client-runtime/authorization";
 import {
+  type BearerConnectionCredential,
   ConnectionTransientError,
   ConnectionBlockedError,
   CredentialStore,
@@ -36,7 +37,6 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Ref from "effect/Ref";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
@@ -264,6 +264,10 @@ const encodeCatalog = Effect.fn("web.connectionStorage.encodeCatalog")(function*
 });
 
 export interface CatalogBackend {
+  readonly compareAndSet?: (
+    expected: string | null,
+    raw: string,
+  ) => Effect.Effect<boolean, ConnectionTransientError>;
   readonly read: Effect.Effect<string | null, ConnectionTransientError>;
   readonly write: (raw: string) => Effect.Effect<void, ConnectionTransientError>;
   readonly quarantine?: (raw: string) => Effect.Effect<void, ConnectionTransientError>;
@@ -273,6 +277,15 @@ export function makeCatalogBackend(database: IDBDatabase): CatalogBackend {
   const bridge = window.desktopBridge;
   if (bridge?.getConnectionCatalog !== undefined && bridge.setConnectionCatalog !== undefined) {
     return {
+      ...(bridge.compareConnectionCatalog
+        ? {
+            compareAndSet: (expected: string | null, raw: string) =>
+              Effect.tryPromise({
+                try: () => bridge.compareConnectionCatalog!(expected, raw),
+                catch: (cause) => catalogError("save", cause),
+              }),
+          }
+        : {}),
       read: Effect.tryPromise({
         try: () => bridge.getConnectionCatalog!(),
         catch: (cause) => catalogError("load", cause),
@@ -297,6 +310,31 @@ export function makeCatalogBackend(database: IDBDatabase): CatalogBackend {
   }
 
   return {
+    compareAndSet: (expected, raw) =>
+      Effect.callback<boolean, ConnectionTransientError>((resume) => {
+        const transaction = database.transaction(CATALOG_STORE_NAME, "readwrite");
+        let matched = false;
+        transaction.addEventListener("abort", () =>
+          resume(
+            Effect.fail(catalogError("save", transaction.error ?? "IndexedDB transaction aborted")),
+          ),
+        );
+        transaction.addEventListener("error", () =>
+          resume(
+            Effect.fail(catalogError("save", transaction.error ?? "IndexedDB transaction failed")),
+          ),
+        );
+        transaction.addEventListener("complete", () => resume(Effect.succeed(matched)));
+        const store = transaction.objectStore(CATALOG_STORE_NAME);
+        const request = store.get(CATALOG_KEY);
+        request.addEventListener("success", () => {
+          const current = typeof request.result === "string" ? request.result : null;
+          if (current === expected) {
+            matched = true;
+            store.put(raw, CATALOG_KEY);
+          }
+        });
+      }),
     read: readDatabaseValue(database, CATALOG_STORE_NAME, CATALOG_KEY).pipe(
       Effect.map((value) => (typeof value === "string" ? value : null)),
     ),
@@ -307,6 +345,7 @@ export function makeCatalogBackend(database: IDBDatabase): CatalogBackend {
 }
 
 interface CatalogStore {
+  readonly supportsAtomicUpdates: boolean;
   readonly read: Effect.Effect<ConnectionCatalogDocumentType, ConnectionTransientError>;
   readonly update: (
     transform: (catalog: ConnectionCatalogDocumentType) => ConnectionCatalogDocumentType,
@@ -316,14 +355,9 @@ interface CatalogStore {
 export const makeCatalogStore = Effect.fn("web.connectionStorage.makeCatalogStore")(function* (
   backend: CatalogBackend,
 ) {
-  const state = yield* Ref.make<Option.Option<ConnectionCatalogDocumentType>>(Option.none());
   const lock = yield* Semaphore.make(1);
 
   const loadUnlocked = Effect.fn("web.connectionStorage.loadCatalog")(function* () {
-    const cached = yield* Ref.get(state);
-    if (Option.isSome(cached)) {
-      return cached.value;
-    }
     const raw = yield* backend.read;
     let catalog = EMPTY_CONNECTION_CATALOG_DOCUMENT;
     if (raw !== null && raw.trim() !== "") {
@@ -343,7 +377,13 @@ export const makeCatalogStore = Effect.fn("web.connectionStorage.makeCatalogStor
               );
             }
             const encoded = yield* encodeCatalog(EMPTY_CONNECTION_CATALOG_DOCUMENT);
-            yield* backend.write(encoded).pipe(
+            if (backend.compareAndSet && !(yield* backend.compareAndSet(raw, encoded))) {
+              const latest = yield* backend.read;
+              return latest === null
+                ? EMPTY_CONNECTION_CATALOG_DOCUMENT
+                : yield* decodeCatalog(latest);
+            }
+            yield* (backend.compareAndSet ? Effect.void : backend.write(encoded)).pipe(
               Effect.catch((cause) =>
                 Effect.logWarning("Could not persist the recovered web connection catalog.", {
                   error: cause.message,
@@ -355,7 +395,6 @@ export const makeCatalogStore = Effect.fn("web.connectionStorage.makeCatalogStor
         ),
       );
     }
-    yield* Ref.set(state, Option.some(catalog));
     return catalog;
   });
 
@@ -364,15 +403,34 @@ export const makeCatalogStore = Effect.fn("web.connectionStorage.makeCatalogStor
     function* (transform) {
       yield* lock.withPermits(1)(
         Effect.gen(function* () {
-          const next = transform(yield* loadUnlocked());
-          yield* backend.write(yield* encodeCatalog(next));
-          yield* Ref.set(state, Option.some(next));
+          if (!backend.compareAndSet) {
+            yield* backend.write(yield* encodeCatalog(transform(yield* loadUnlocked())));
+            return;
+          }
+          // The storage owner arbitrates all windows/tabs; this local lock is only an optimization.
+          for (let attempt = 0; attempt < 8; attempt += 1) {
+            const raw = yield* backend.read;
+            const current =
+              raw === null || raw.trim() === ""
+                ? EMPTY_CONNECTION_CATALOG_DOCUMENT
+                : yield* decodeCatalog(raw);
+            const next = yield* encodeCatalog(transform(current));
+            if (yield* backend.compareAndSet(raw, next)) return;
+          }
+          return yield* catalogError(
+            "save",
+            "Connection catalog changed concurrently; retry required.",
+          );
         }),
       );
     },
   );
 
-  return { read, update } satisfies CatalogStore;
+  return {
+    read,
+    update,
+    supportsAtomicUpdates: backend.compareAndSet !== undefined,
+  } satisfies CatalogStore;
 });
 
 const GITHUB_ROUTING_KEY_PREFIX = "t3code:github-routing:";
@@ -549,6 +607,35 @@ export const connectionStorageLayer = Layer.effectContext(
             credential,
           }),
         })),
+      ...(catalog.supportsAtomicUpdates
+        ? {
+            compareAndSet: (
+              connectionId: string,
+              expected: BearerConnectionCredential,
+              credential: BearerConnectionCredential,
+            ) =>
+              Effect.gen(function* () {
+                let replaced = false;
+                yield* catalog.update((document) => {
+                  replaced = false;
+                  const current = document.credentials.find(
+                    (entry) => entry.connectionId === connectionId,
+                  )?.credential;
+                  if (current?.token !== expected.token) return document;
+                  replaced = true;
+                  return {
+                    ...document,
+                    credentials: replaceCatalogValue(
+                      document.credentials,
+                      (value) => value.connectionId,
+                      { connectionId, credential },
+                    ),
+                  };
+                });
+                return replaced;
+              }),
+          }
+        : {}),
       remove: (connectionId) =>
         catalog.update((document) => ({
           ...document,

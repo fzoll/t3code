@@ -2,6 +2,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   AuthAccessReadScope,
+  AuthAccessTokenType,
   AuthAccessWriteScope,
   AuthStandardClientScopes,
   AuthOrchestrationOperateScope,
@@ -25,7 +26,7 @@ import {
   EnvironmentAuthenticatedPrincipal,
 } from "@t3tools/contracts";
 import type { AuthEnvironmentScope, DpopFailureReason } from "@t3tools/contracts";
-import { parseAllowedOAuthScope } from "@t3tools/shared/oauthScope";
+import { encodeOAuthScope, parseAllowedOAuthScope } from "@t3tools/shared/oauthScope";
 import { causeErrorTag } from "@t3tools/shared/observability";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -403,6 +404,47 @@ export const authHttpApiLayer = HttpApiBuilder.group(
           ),
           Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
             failEnvironmentInternal("access_token_issuance_failed", error),
+          ),
+        ),
+      )
+      .handle(
+        "renewBearerSession",
+        Effect.fn("environment.auth.renewBearerSession")(
+          function* (args) {
+            yield* annotateEnvironmentRequest(args.endpoint.name);
+            const request = yield* HttpServerRequest.HttpServerRequest;
+            const principal = yield* EnvironmentAuthenticatedPrincipal;
+            const credential = EnvironmentAuth.selectRequestCredential(
+              request,
+              sessions.cookieName,
+              sessions.legacyCookieName,
+            );
+            if (credential?.source !== "bearer" || principal.method !== "bearer-access-token") {
+              return yield* failEnvironmentAuthInvalid("invalid_credential");
+            }
+            const renewed = yield* sessions.renewBearer(credential.token);
+            const session = Option.isSome(renewed)
+              ? renewed.value
+              : yield* sessions.verify(credential.token);
+            if (!session.expiresAt) return yield* failEnvironmentAuthInvalid("invalid_credential");
+            const now = yield* DateTime.now;
+            yield* appendCredentialResponseHeaders;
+            return {
+              access_token: Option.isSome(renewed) ? renewed.value.token : credential.token,
+              issued_token_type: AuthAccessTokenType,
+              token_type: "Bearer" as const,
+              expires_in: Math.max(
+                0,
+                Math.floor((session.expiresAt.epochMilliseconds - now.epochMilliseconds) / 1000),
+              ),
+              scope: encodeOAuthScope(session.scopes),
+            };
+          },
+          Effect.catchIf(Schema.is(SessionStore.SessionCredentialInvalidError), () =>
+            failEnvironmentAuthInvalid("invalid_credential"),
+          ),
+          Effect.catchIf(Schema.is(SessionStore.SessionCredentialInternalError), (error) =>
+            failEnvironmentInternal("internal_error", error),
           ),
         ),
       )

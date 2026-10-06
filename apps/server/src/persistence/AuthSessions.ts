@@ -98,7 +98,8 @@ export const SetAuthSessionClientConnectionInput = Schema.Struct({
 });
 export type SetAuthSessionClientConnectionInput = typeof SetAuthSessionClientConnectionInput.Type;
 
-export const RenewBrowserSessionInput = Schema.Struct({
+export const RenewSessionInput = Schema.Struct({
+  method: Schema.Literals(["browser-session-cookie", "bearer-access-token"]),
   sessionId: AuthSessionId,
   now: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
@@ -107,8 +108,8 @@ export const RenewBrowserSessionInput = Schema.Struct({
 export class AuthSessionRepository extends Context.Service<
   AuthSessionRepository,
   {
-    readonly renewBrowser: (
-      input: typeof RenewBrowserSessionInput.Type,
+    readonly renewSession: (
+      input: typeof RenewSessionInput.Type,
     ) => Effect.Effect<boolean, AuthSessionRepositoryError>;
     readonly create: (
       input: CreateAuthSessionInput,
@@ -324,22 +325,22 @@ export const make = Effect.gen(function* () {
       `,
   });
 
-  const renewBrowserRow = SqlSchema.findAll({
-    Request: RenewBrowserSessionInput,
+  const renewSessionRow = SqlSchema.findAll({
+    Request: RenewSessionInput,
     Result: Schema.Struct({ sessionId: AuthSessionId }),
-    execute: ({ sessionId, now, expiresAt }) => sql`
+    execute: ({ sessionId, now, expiresAt, method }) => sql`
       UPDATE auth_sessions SET expires_at = MAX(expires_at, ${expiresAt})
-      WHERE session_id = ${sessionId} AND method = 'browser-session-cookie'
+      WHERE session_id = ${sessionId} AND method = ${method}
         AND revoked_at IS NULL AND expires_at > ${now}
       RETURNING session_id AS "sessionId"
     `,
   });
-  const renewBrowser: AuthSessionRepository["Service"]["renewBrowser"] = (input) =>
-    renewBrowserRow(input).pipe(
+  const renewSession: AuthSessionRepository["Service"]["renewSession"] = (input) =>
+    renewSessionRow(input).pipe(
       Effect.mapError(
         toPersistenceSqlOrDecodeError(
-          "AuthSessionRepository.renewBrowser:query",
-          "AuthSessionRepository.renewBrowser:decodeRows",
+          "AuthSessionRepository.renewSession:query",
+          "AuthSessionRepository.renewSession:decodeRows",
           { sessionId: input.sessionId },
         ),
       ),
@@ -540,7 +541,7 @@ export const make = Effect.gen(function* () {
     );
 
   return {
-    renewBrowser,
+    renewSession,
     create,
     createReplacingActive,
     createIfAbsent,
