@@ -1,3 +1,4 @@
+import * as Schema from "effect/Schema";
 import { AuthStandardClientScopes, EnvironmentId } from "@t3tools/contracts";
 import {
   RelayEnvironmentConnectScope,
@@ -20,6 +21,8 @@ import { remoteHttpClientLayer } from "../rpc/http.ts";
 import * as ClientCapabilities from "../platform/capabilities.ts";
 import * as RemoteEnvironmentAuthorization from "./service.ts";
 import * as TokenStore from "./tokenStore.ts";
+
+const encodeRenewalTestClaims = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-1");
 const ENDPOINT = {
@@ -230,6 +233,56 @@ const makeHarness = Effect.fn("TestRemoteAuthorization.makeHarness")(function* (
 });
 
 describe("RemoteEnvironmentAuthorization", () => {
+  for (const status of [200, 404, 401]) {
+    it.effect(`handles bearer renewal response ${status} before obtaining a ticket`, () =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        const token = `${btoa(encodeRenewalTestClaims({ v: 1, kind: "session", method: "bearer-access-token", exp: now + 86400000 }))}.signature`;
+        const renewal =
+          status === 200
+            ? Response.json({
+                access_token: "renewed-token",
+                issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+                token_type: "Bearer",
+                expires_in: 2592000,
+                scope: "orchestration:read",
+              })
+            : status === 401
+              ? authInvalid()
+              : new Response("Not found", { status: 404 });
+        const harness = yield* makeHarness({
+          responses: [Response.json(DESCRIPTOR), renewal, websocketTicket("ticket")],
+        });
+        const operation = Effect.gen(function* () {
+          const remote = yield* RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization;
+          return yield* remote.authorizeBearer({
+            expectedEnvironmentId: ENVIRONMENT_ID,
+            httpBaseUrl: ENDPOINT.httpBaseUrl,
+            wsBaseUrl: ENDPOINT.wsBaseUrl,
+            bearerToken: token,
+            connectionMethod: "direct",
+            renewSession: true,
+          });
+        }).pipe(Effect.provide(harness.layer));
+        if (status === 401) {
+          expect((yield* Effect.flip(operation))._tag).toBe("ConnectionBlockedError");
+          expect(harness.fetch.calls).toHaveLength(2);
+        } else {
+          const result = yield* operation;
+          expect(result.httpAuthorization).toEqual({
+            _tag: "Bearer",
+            token: status === 200 ? "renewed-token" : token,
+          });
+          expect(harness.fetch.calls).toHaveLength(3);
+          const headers = new Headers(harness.fetch.calls[2]?.[1].headers);
+          expect(headers.get("authorization")).toBe(
+            `Bearer ${status === 200 ? "renewed-token" : token}`,
+          );
+        }
+      }),
+    );
+  }
+
   it.effect("reuses a validated bearer descriptor while issuing fresh websocket tickets", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({

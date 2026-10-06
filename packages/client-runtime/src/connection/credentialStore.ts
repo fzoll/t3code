@@ -15,6 +15,11 @@ export class ConnectionCredentialStore extends Context.Service<
       connectionId: string,
       credential: ConnectionCredential,
     ) => Effect.Effect<void, ConnectionAttemptError>;
+    readonly compareAndSet?: (
+      connectionId: string,
+      expected: ConnectionCredential,
+      credential: ConnectionCredential,
+    ) => Effect.Effect<boolean, ConnectionAttemptError>;
     readonly remove: (connectionId: string) => Effect.Effect<void, ConnectionAttemptError>;
   }
 >()("@t3tools/client-runtime/connection/credentialStore/ConnectionCredentialStore") {}

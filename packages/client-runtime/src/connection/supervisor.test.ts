@@ -1,3 +1,4 @@
+import * as Schema from "effect/Schema";
 import { AuthStandardClientScopes, EnvironmentId } from "@t3tools/contracts";
 import { RelayClientTracer } from "@t3tools/shared/relayTracing";
 import { describe, expect, it } from "@effect/vitest";
@@ -26,6 +27,7 @@ import type { ConnectionCatalogEntry } from "./catalog.ts";
 import * as Connectivity from "./connectivity.ts";
 import * as ConnectionDriver from "./driver.ts";
 import {
+  BearerConnectionTarget,
   ConnectionBlockedError,
   ConnectionTransientError,
   PrimaryConnectionTarget,
@@ -40,6 +42,8 @@ import * as RpcSession from "../rpc/session.ts";
 import * as EnvironmentSupervisor from "./supervisor.ts";
 import * as ConnectionWakeups from "./wakeups.ts";
 import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
+
+const encodeRenewalTestClaims = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
@@ -230,6 +234,47 @@ const makeHarness = Effect.fn("TestConnectionHarness.make")(function* (options?:
 });
 
 describe("EnvironmentSupervisor", () => {
+  it.effect(
+    "renews an open bearer transport before expiry and cancels its timer on disconnect",
+    () =>
+      Effect.gen(function* () {
+        const target = new BearerConnectionTarget({
+          environmentId: TARGET.environmentId,
+          label: "Saved",
+          connectionId: "saved",
+        });
+        const token = `${btoa(encodeRenewalTestClaims({ v: 1, kind: "session", method: "bearer-access-token", exp: 8 * 86400000 }))}.signature`;
+        const harness = yield* makeHarness({
+          prepare: () =>
+            Effect.succeed({
+              ...PREPARED_CONNECTION,
+              renewBearerSession: true,
+              target,
+              httpAuthorization: { _tag: "Bearer", token },
+            }),
+        });
+        const supervisor = yield* EnvironmentSupervisor.make({
+          target,
+          profile: Option.none(),
+          enabled: true,
+        }).pipe(Effect.provide(harness.dependencies));
+        yield* supervisor.connect;
+        yield* awaitState(supervisor.state, (state) => state.phase === "connected");
+        yield* TestClock.adjust("23 hours");
+        expect(yield* Ref.get(harness.sessionCount)).toBe(1);
+        yield* TestClock.adjust("1 hour");
+        yield* awaitState(
+          supervisor.state,
+          (state) => state.phase === "connected" && state.generation > 1,
+        );
+        expect(yield* Ref.get(harness.sessionCount)).toBe(2);
+        yield* supervisor.disconnect;
+        yield* awaitState(supervisor.state, (state) => !state.desired);
+        yield* TestClock.adjust("2 days");
+        expect(yield* Ref.get(harness.sessionCount)).toBe(2);
+      }),
+  );
+
   it.effect("exports each relay setup as a standalone linked trace that ends at readiness", () =>
     Effect.gen(function* () {
       const spans: Array<Tracer.NativeSpan> = [];

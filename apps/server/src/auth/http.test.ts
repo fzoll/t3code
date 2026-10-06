@@ -146,7 +146,64 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           expect(restrictedCookies[0]).toMatch(/^t3_session_/);
           expect(restrictedCookies[0]).not.toContain("t3_dev_session_");
           const originalCookie = restrictedCookies[0]?.split(";", 1)[0] ?? "";
+          const bearerPairResponse = yield* Effect.promise(() =>
+            environmentA.handler(
+              postJson(
+                "/api/auth/pairing-token",
+                { scopes: ["orchestration:read"] },
+                { cookie: devCookieHeader },
+              ),
+              requestContext,
+            ),
+          );
+          const bearerPair = (yield* Effect.promise(() => bearerPairResponse.json())) as {
+            credential: string;
+          };
+          const bearerResponse = yield* Effect.promise(() =>
+            environmentA.handler(
+              new Request("http://127.0.0.1/oauth/token", {
+                method: "POST",
+                body: new URLSearchParams({
+                  grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+                  subject_token_type: "urn:t3:params:oauth:token-type:environment-bootstrap",
+                  subject_token: bearerPair.credential,
+                  requested_token_type: "urn:ietf:params:oauth:token-type:access_token",
+                }),
+              }),
+              requestContext,
+            ),
+          );
+          expect(bearerResponse.status).toBe(200);
+          const bearer = (yield* Effect.promise(() => bearerResponse.json())) as {
+            access_token: string;
+          };
           yield* testClock.adjust("24 days");
+          const renewedBearerResponse = yield* Effect.promise(() =>
+            environmentA.handler(
+              postJson(
+                "/api/auth/session/renew",
+                {},
+                { authorization: `Bearer ${bearer.access_token}` },
+              ),
+              requestContext,
+            ),
+          );
+          expect(renewedBearerResponse.status).toBe(200);
+          expect(renewedBearerResponse.headers.get("cache-control")).toBe("no-store");
+          expect(renewedBearerResponse.headers.getSetCookie()).toEqual([]);
+          const renewedBearer = (yield* Effect.promise(() => renewedBearerResponse.json())) as {
+            access_token: string;
+            scope: string;
+          };
+          expect(renewedBearer.access_token).not.toBe(bearer.access_token);
+          expect(renewedBearer.scope).toBe("orchestration:read");
+          const cookieRenewal = yield* Effect.promise(() =>
+            environmentA.handler(
+              postJson("/api/auth/session/renew", {}, { cookie: originalCookie }),
+              requestContext,
+            ),
+          );
+          expect(cookieRenewal.status).toBe(401);
           const renewedResponse = yield* Effect.promise(() =>
             environmentA.handler(
               new Request("http://127.0.0.1/api/auth/session", {

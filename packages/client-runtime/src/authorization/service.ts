@@ -7,10 +7,12 @@ import { RelayEnvironmentConnectScope } from "@t3tools/contracts/relay";
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 import {
   exchangeRemoteDpopAccessToken,
+  renewRemoteBearerSession,
   type RemoteEnvironmentAuthError,
   resolveRemoteDpopWebSocketConnectionUrl,
   resolveRemoteWebSocketConnectionUrl,
 } from "./remote.ts";
+import { bearerRenewalDelay } from "./bearerRenewal.ts";
 import {
   environmentMismatchError,
   mapManagedRelayError,
@@ -67,6 +69,7 @@ export class RemoteEnvironmentAuthorization extends Context.Service<
       readonly httpBaseUrl: string;
       readonly wsBaseUrl: string;
       readonly bearerToken: string;
+      readonly renewSession?: boolean;
       readonly connectionMethod: ClientConnectionMethod;
     }) => Effect.Effect<AuthorizedRemoteEnvironment, ConnectionAttemptError>;
     readonly authorizeDpop: (input: {
@@ -140,6 +143,7 @@ export const make = Effect.gen(function* () {
       readonly httpBaseUrl: string;
       readonly wsBaseUrl: string;
       readonly bearerToken: string;
+      readonly renewSession?: boolean;
       readonly connectionMethod: ClientConnectionMethod;
     }) {
       const now = yield* Clock.currentTimeMillis;
@@ -169,10 +173,25 @@ export const make = Effect.gen(function* () {
           return next;
         });
       }
+      const bearerToken =
+        input.renewSession && bearerRenewalDelay(input.bearerToken, now) === 0
+          ? yield* renewRemoteBearerSession(input).pipe(
+              Effect.map((result) => result.access_token),
+              // Older environments may not implement renewal yet. Never hide a 401.
+              Effect.catchIf(
+                (error) =>
+                  error._tag === "RemoteEnvironmentAuthUndeclaredStatusError" &&
+                  error.status === 404,
+                () => Effect.succeed(input.bearerToken),
+              ),
+              Effect.mapError(mapRemoteEnvironmentError),
+              Effect.provideService(HttpClient.HttpClient, httpClient),
+            )
+          : input.bearerToken;
       const socketUrl = yield* resolveRemoteWebSocketConnectionUrl({
         wsBaseUrl: input.wsBaseUrl,
         httpBaseUrl: input.httpBaseUrl,
-        bearerToken: input.bearerToken,
+        bearerToken,
         clientMetadata: presentation.metadata,
         connectionMethod: input.connectionMethod,
       }).pipe(
@@ -186,7 +205,7 @@ export const make = Effect.gen(function* () {
         socketUrl,
         httpAuthorization: {
           _tag: "Bearer" as const,
-          token: input.bearerToken,
+          token: bearerToken,
         },
       };
     },

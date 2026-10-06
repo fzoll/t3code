@@ -549,6 +549,26 @@ export const connectionStorageLayer = Layer.effectContext(
             credential,
           }),
         })),
+      compareAndSet: (connectionId, expected, credential) =>
+        Effect.gen(function* () {
+          let replaced = false;
+          yield* catalog.update((document) => {
+            const current = document.credentials.find(
+              (entry) => entry.connectionId === connectionId,
+            )?.credential;
+            if (current?.token !== expected.token) return document;
+            replaced = true;
+            return {
+              ...document,
+              credentials: replaceCatalogValue(
+                document.credentials,
+                (value) => value.connectionId,
+                { connectionId, credential },
+              ),
+            };
+          });
+          return replaced;
+        }),
       remove: (connectionId) =>
         catalog.update((document) => ({
           ...document,

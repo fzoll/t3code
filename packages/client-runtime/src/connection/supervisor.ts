@@ -1,3 +1,4 @@
+import { bearerRenewalDelay } from "../authorization/bearerRenewal.ts";
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -579,6 +580,20 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
       retryAt: null,
     });
 
+    const renewalDelay =
+      target._tag === "BearerConnectionTarget" &&
+      active.lease.prepared.renewBearerSession &&
+      active.lease.prepared.httpAuthorization?._tag === "Bearer"
+        ? bearerRenewalDelay(active.lease.prepared.httpAuthorization.token, connectedAt)
+        : undefined;
+    // Re-establish only the UI transport; provider turns remain owned by the server.
+    // Bound retries for old servers or clock skew, and cancel the timer with the lease.
+    const renewalWakeup =
+      renewalDelay === undefined
+        ? Effect.never
+        : Effect.sleep(
+            Math.max(60 * 60 * 1000, Math.min(renewalDelay, 24 * 24 * 60 * 60 * 1000)),
+          ).pipe(Effect.as(true));
     const connectedExit = yield* Effect.raceFirst(
       active.lease.session.closed.pipe(
         Effect.mapError((error): TracedAttemptFailure => ({
@@ -586,7 +601,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
           attemptSpan: active.attemptSpan,
         })),
       ),
-      monitorConnectedLease(active.lease).pipe(
+      Effect.raceFirst(monitorConnectedLease(active.lease), renewalWakeup).pipe(
         Effect.mapError((error): TracedAttemptFailure => ({
           error,
           attemptSpan: active.attemptSpan,

@@ -139,6 +139,17 @@ export const bootstrapRemoteBearerSession = Effect.fn(
   );
 });
 
+export const renewRemoteBearerSession = Effect.fn(
+  "clientRuntime.authorization.renewRemoteBearerSession",
+)(function* (input: { readonly httpBaseUrl: string; readonly bearerToken: string }) {
+  const client = yield* makeEnvironmentHttpApiGroupClient(input.httpBaseUrl, "auth");
+  return yield* executeEnvironmentHttpRequest(
+    environmentEndpointUrl(input.httpBaseUrl, "/api/auth/session/renew"),
+    DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
+    client.renewBearerSession({ headers: { authorization: `Bearer ${input.bearerToken}` } }),
+  );
+});
+
 export const fetchRemoteSessionState = Effect.fn(
   "clientRuntime.authorization.fetchRemoteSessionState",
 )(function* (input: {

@@ -91,7 +91,7 @@ const repositoryFailure = new PersistenceSqlError({
 });
 
 const failingSessionLookupRepositoryLayer = Layer.succeed(AuthSessions.AuthSessionRepository, {
-  renewBrowser: () => Effect.succeed(false),
+  renewSession: () => Effect.succeed(false),
   create: () => Effect.void,
   createReplacingActive: () => Effect.succeed([]),
   createIfAbsent: () => Effect.void,
@@ -143,6 +143,34 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
         "SessionTokenRevokedError",
       );
       expect((yield* Effect.flip(store.renewBrowser(renewed.token)))._tag).toBe(
+        "SessionTokenRevokedError",
+      );
+    }).pipe(Effect.provide(makeSessionStoreLayer())),
+  );
+
+  it.effect("renews valid bearer credentials without reviving expiry or revocation", () =>
+    Effect.gen(function* () {
+      const store = yield* SessionStore.SessionStore;
+      const issued = yield* store.issue({
+        method: "bearer-access-token",
+        proofKeyThumbprint: "bound-key",
+      });
+      const inactive = yield* store.issue({ method: "bearer-access-token" });
+      const cookie = yield* store.issue();
+      expect(Option.isNone(yield* store.renewBearer(issued.token))).toBe(true);
+      yield* TestClock.adjust(Duration.days(24));
+      expect(Option.isNone(yield* store.renewBearer(cookie.token))).toBe(true);
+      const renewed = Option.getOrThrow(yield* store.renewBearer(issued.token));
+      expect(renewed.sessionId).toBe(issued.sessionId);
+      expect(renewed.scopes).toEqual(issued.scopes);
+      expect((yield* store.verify(renewed.token)).proofKeyThumbprint).toBe("bound-key");
+      yield* TestClock.adjust(Duration.days(7));
+      expect((yield* Effect.flip(store.renewBearer(inactive.token)))._tag).toBe(
+        "SessionTokenExpiredError",
+      );
+      expect((yield* store.verify(renewed.token)).sessionId).toBe(issued.sessionId);
+      yield* store.revoke(issued.sessionId);
+      expect((yield* Effect.flip(store.renewBearer(renewed.token)))._tag).toBe(
         "SessionTokenRevokedError",
       );
     }).pipe(Effect.provide(makeSessionStoreLayer())),

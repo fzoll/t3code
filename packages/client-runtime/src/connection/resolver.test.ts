@@ -68,6 +68,7 @@ function collectingTracer(spans: Array<string>): Tracer.Tracer {
 }
 
 const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((options?: {
+  readonly compareAndSet?: ConnectionCredentialStore.ConnectionCredentialStore["Service"]["compareAndSet"];
   readonly profiles?: ReadonlyArray<ConnectionProfile>;
   readonly profileStore?: ConnectionProfileStore.ConnectionProfileStore["Service"];
   readonly credentials?: ReadonlyArray<readonly [string, ConnectionCredential]>;
@@ -87,6 +88,7 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
     remove: (connectionId) => Effect.sync(() => void profiles.delete(connectionId)),
   });
   const credentialStore = ConnectionCredentialStore.ConnectionCredentialStore.of({
+    ...(options?.compareAndSet ? { compareAndSet: options.compareAndSet } : {}),
     get: (connectionId) => Effect.succeed(Option.fromNullishOr(credentials.get(connectionId))),
     put: (connectionId, credential) =>
       Effect.sync(() => void credentials.set(connectionId, credential)),
@@ -166,6 +168,53 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
 });
 
 describe("ConnectionResolver", () => {
+  for (const replaced of [true, false]) {
+    it.effect(`persists renewal with compare-and-set result ${replaced}`, () =>
+      Effect.gen(function* () {
+        const target = new BearerConnectionTarget({
+          environmentId: ENVIRONMENT_ID,
+          label: "Saved",
+          connectionId: "saved",
+        });
+        const profile = new BearerConnectionProfile({
+          ...ENDPOINT,
+          connectionId: "saved",
+          environmentId: ENVIRONMENT_ID,
+          label: "Saved",
+        });
+        const calls: string[] = [];
+        const layer = yield* makeDependencies({
+          credentials: [["saved", new BearerConnectionCredential({ token: "original" })]],
+          compareAndSet: (id, old, next) =>
+            Effect.sync(() => {
+              calls.push(`${id}:${old.token}:${next.token}`);
+              return replaced;
+            }),
+          authorizeBearer: (input) =>
+            Effect.sync(() => {
+              expect(input.renewSession).toBe(true);
+              return {
+                environmentId: ENVIRONMENT_ID,
+                label: "Saved",
+                httpBaseUrl: ENDPOINT.httpBaseUrl,
+                socketUrl: "wss://example.test/ws",
+                httpAuthorization: { _tag: "Bearer" as const, token: "renewed" },
+              };
+            }),
+        });
+        const broker = yield* ConnectionResolver.ConnectionResolver.pipe(Effect.provide(layer));
+        const operation = broker.prepare(catalogEntry(target, Option.some(profile)));
+        if (replaced)
+          expect((yield* operation).httpAuthorization).toEqual({
+            _tag: "Bearer",
+            token: "renewed",
+          });
+        else expect((yield* Effect.flip(operation))._tag).toBe("ConnectionTransientError");
+        expect(calls).toEqual(["saved:original:renewed"]);
+      }),
+    );
+  }
+
   it.effect("prepares a primary environment without remote capabilities", () =>
     Effect.gen(function* () {
       const brokerLayer = yield* makeDependencies();
