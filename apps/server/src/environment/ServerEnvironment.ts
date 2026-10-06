@@ -1,10 +1,8 @@
-import * as NodeOS from "node:os";
 import {
   EnvironmentId,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   type ExecutionEnvironmentDescriptor,
 } from "@t3tools/contracts";
-import { availableMemoryMb } from "../diagnostics/availableMemory.ts";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -269,8 +267,9 @@ export const make = Effect.gen(function* () {
     getEnvironmentId: Effect.succeed(environmentId),
     // The publish opt-in and relay link change at runtime (`t3 connect
     // publish`, the client settings toggle), so the capability is read per
-    // descriptor request rather than baked in at startup. Host resources are
-    // sampled per request for the same reason.
+    // descriptor request rather than baked in at startup. Whole-host resource
+    // sampling lives in HostResources (serverGetHostResources) and is attached
+    // to the HTTP descriptor at the edge, not here.
     getDescriptor: readAgentActivityPublishingActive(secrets).pipe(
       Effect.map((agentActivityPublishing): ExecutionEnvironmentDescriptor => ({
         ...baseDescriptor,
@@ -278,10 +277,6 @@ export const make = Effect.gen(function* () {
           ...baseDescriptor.capabilities,
           agentActivityPublishing,
           pipelineProtocolVersion: 1,
-        },
-        resources: {
-          freeMemoryMb: availableMemoryMb(hostPlatform),
-          totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
         },
       })),
     ),

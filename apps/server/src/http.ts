@@ -27,14 +27,12 @@ import {
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { OtlpTracer, OtlpSerialization } from "effect/unstable/observability";
 
-import * as NodeOS from "node:os";
 import * as ServerConfig from "./config.ts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
-import { availableMemoryMb } from "./diagnostics/availableMemory.ts";
 import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import { ProviderService } from "./provider/Services/ProviderService.ts";
+import { HostResources } from "./resourceTelemetry/HostResources.ts";
 import { statMediaFile, streamMediaFile, type OpenMediaFile } from "./assets/MediaFile.ts";
 import {
   ATTACHMENT_UPLOAD_ROUTE_PREFIX,
@@ -302,12 +300,19 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
   Effect.fnUntraced(function* (handlers) {
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
     const providerService = yield* ProviderService;
-    const hostPlatform = yield* HostProcessPlatform;
+    const hostResources = yield* HostResources;
     return handlers.handle(
       "descriptor",
       Effect.fn("environment.metadata.descriptor")(function* (args) {
         yield* annotateEnvironmentRequest(args.endpoint.name);
         const descriptor = yield* serverEnvironment.getDescriptor;
+        // Memory comes from the shared HostResources snapshot
+        // (serverGetHostResources) so cc_runner load balancing over this HTTP
+        // descriptor reads the same numbers as the WS clients and the external
+        // MCP. Per-session RSS stays here because only cc_runner consumes it.
+        const host = yield* hostResources.read;
+        const freeMemoryMb = Math.round(host.availableMemoryBytes / (1024 * 1024));
+        const totalMemoryMb = Math.round(host.totalMemoryBytes / (1024 * 1024));
         const sessionPids = yield* providerService
           .getSessionPids()
           .pipe(Effect.orElseSucceed(() => null));
@@ -315,7 +320,8 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
           return {
             ...descriptor,
             resources: {
-              ...descriptor.resources!,
+              freeMemoryMb,
+              totalMemoryMb,
               sessionsKnown: sessionPids !== null,
               sessions: [],
             },
@@ -339,9 +345,8 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
         return {
           ...descriptor,
           resources: {
-            ...descriptor.resources,
-            freeMemoryMb: availableMemoryMb(hostPlatform),
-            totalMemoryMb: Math.round(NodeOS.totalmem() / (1024 * 1024)),
+            freeMemoryMb,
+            totalMemoryMb,
             sessionsKnown: true,
             sessions,
           },
