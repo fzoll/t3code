@@ -383,6 +383,9 @@ export class SessionStore extends Context.Service<
     readonly renewBrowser: (
       token: string,
     ) => Effect.Effect<Option.Option<IssuedSession>, SessionCredentialError>;
+    readonly renewBearer: (
+      token: string,
+    ) => Effect.Effect<Option.Option<IssuedSession>, SessionCredentialError>;
     readonly verify: (token: string) => Effect.Effect<VerifiedSession, SessionCredentialError>;
     readonly issueWebSocketToken: (
       sessionId: AuthSessionId,
@@ -847,15 +850,16 @@ export const make = Effect.gen(function* () {
   );
 
   const encodeWsClaims = Schema.encodeEffect(Schema.fromJsonString(WebSocketClaims));
-  // Renew only a still-valid browser credential, retaining its session identity so
+  // Renew only a still-valid credential of the selected method, retaining its identity so
   // revocation and connected WebSocket ownership continue to target the same client.
-  const renewBrowser: SessionStore["Service"]["renewBrowser"] = Effect.fn(
-    "SessionStore.renewBrowser",
-  )(function* (token) {
+  const renewSession = Effect.fn("SessionStore.renewSession")(function* (
+    token: string,
+    method: "browser-session-cookie" | "bearer-access-token",
+  ) {
     const session = yield* verify(token);
     const now = yield* DateTime.now;
     if (
-      session.method !== "browser-session-cookie" ||
+      session.method !== method ||
       devAuth?.matches(token) ||
       !session.expiresAt ||
       session.expiresAt.epochMilliseconds <= now.epochMilliseconds ||
@@ -866,7 +870,7 @@ export const make = Effect.gen(function* () {
     }
     const expiresAt = DateTime.add(now, { milliseconds: Duration.toMillis(DEFAULT_SESSION_TTL) });
     const renewed = yield* authSessions
-      .renewBrowser({ sessionId: session.sessionId, now, expiresAt })
+      .renewSession({ sessionId: session.sessionId, now, expiresAt, method })
       .pipe(
         Effect.mapError(
           (cause) => new SessionCredentialIssueError({ sessionId: session.sessionId, cause }),
@@ -896,6 +900,11 @@ export const make = Effect.gen(function* () {
       token: `${payload}.${signPayload(payload, signingSecret)}`,
     });
   });
+
+  const renewBrowser: SessionStore["Service"]["renewBrowser"] = (token) =>
+    renewSession(token, "browser-session-cookie");
+  const renewBearer: SessionStore["Service"]["renewBearer"] = (token) =>
+    renewSession(token, "bearer-access-token");
 
   const issueWebSocketToken: SessionStore["Service"]["issueWebSocketToken"] = Effect.fn(
     "SessionStore.issueWebSocketToken",
@@ -1089,6 +1098,7 @@ export const make = Effect.gen(function* () {
     legacyCookieName,
     issue,
     renewBrowser,
+    renewBearer,
     verify,
     issueWebSocketToken,
     verifyWebSocketToken,

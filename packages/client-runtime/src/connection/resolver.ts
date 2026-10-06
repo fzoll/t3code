@@ -29,7 +29,11 @@ import type {
   RelayConnectionTarget,
   SshConnectionTarget,
 } from "./model.ts";
-import { ConnectionBlockedError, type ConnectionAttemptError } from "./model.ts";
+import {
+  ConnectionBlockedError,
+  ConnectionTransientError,
+  type ConnectionAttemptError,
+} from "./model.ts";
 import * as ConnectionProfileStore from "./profileStore.ts";
 
 export class ConnectionResolver extends Context.Service<
@@ -131,9 +135,29 @@ const makeBearerBroker = Effect.fn("clientRuntime.connection.broker.makeBearer")
       httpBaseUrl: profile.httpBaseUrl,
       wsBaseUrl: profile.wsBaseUrl,
       bearerToken: credential.token,
+      renewSession: credentials.compareAndSet !== undefined,
       connectionMethod: "direct",
     });
+    if (
+      authorized.httpAuthorization?._tag === "Bearer" &&
+      authorized.httpAuthorization.token !== credential.token
+    ) {
+      const persisted =
+        credentials.compareAndSet &&
+        (yield* credentials.compareAndSet(
+          target.connectionId,
+          credential,
+          new BearerConnectionCredential({ token: authorized.httpAuthorization.token }),
+        ));
+      if (!persisted)
+        return yield* new ConnectionTransientError({
+          reason: "transport",
+          detail:
+            "The saved credential changed while renewing; retrying with the current credential.",
+        });
+    }
     return {
+      ...(credentials.compareAndSet ? { renewBearerSession: true } : {}),
       environmentId: authorized.environmentId,
       label: authorized.label,
       httpBaseUrl: authorized.httpBaseUrl,

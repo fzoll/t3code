@@ -1,4 +1,5 @@
 import {
+  BearerConnectionCredential,
   ConnectionTransientError,
   PrimaryConnectionTarget,
 } from "@t3tools/client-runtime/connection";
@@ -35,6 +36,72 @@ afterEach(() => {
 });
 
 describe("makeCatalogStore", () => {
+  for (const replacement of ["repaired", null]) {
+    it.effect(
+      `rebases a stale renewal across independent stores after ${replacement ?? "deletion"}`,
+      () =>
+        Effect.gen(function* () {
+          let raw = encodeCatalog({
+            ...emptyCatalog,
+            credentials: [
+              {
+                connectionId: "saved",
+                credential: new BearerConnectionCredential({ token: "original" }),
+              },
+            ],
+          });
+          let interleave: Effect.Effect<void, ConnectionTransientError> = Effect.void;
+          const backend = {
+            read: Effect.sync(() => raw),
+            write: (next: string) =>
+              Effect.sync(() => {
+                raw = next;
+              }),
+            compareAndSet: (expected: string | null, next: string) =>
+              Effect.gen(function* () {
+                const race = interleave;
+                interleave = Effect.void;
+                yield* race;
+                if (raw !== expected) return false;
+                raw = next;
+                return true;
+              }),
+          };
+          const first = yield* makeCatalogStore(backend);
+          const second = yield* makeCatalogStore(backend);
+          yield* first.read;
+          yield* second.read;
+          interleave = second.update((document) => ({
+            ...document,
+            credentials:
+              replacement === null
+                ? []
+                : [
+                    {
+                      connectionId: "saved",
+                      credential: new BearerConnectionCredential({ token: replacement }),
+                    },
+                  ],
+            disabledEnvironmentIds: [EnvironmentId.make("disabled-by-other-window")],
+          }));
+          yield* first.update((document) => ({
+            ...document,
+            credentials: document.credentials.map((entry) =>
+              entry.credential.token === "original"
+                ? { ...entry, credential: new BearerConnectionCredential({ token: "renewed" }) }
+                : entry,
+            ),
+          }));
+          const final = yield* first.read;
+          expect(final.credentials.map((entry) => entry.credential.token)).toEqual(
+            replacement === null ? [] : [replacement],
+          );
+          expect(final.disabledEnvironmentIds).toEqual(["disabled-by-other-window"]);
+          expect(yield* second.read).toEqual(final);
+        }),
+    );
+  }
+
   it.effect("quarantines malformed catalogs and starts from an empty document", () =>
     Effect.gen(function* () {
       const writes: string[] = [];
@@ -79,6 +146,7 @@ describe("makeCatalogBackend", () => {
         },
       });
       const backend = makeCatalogBackend({} as IDBDatabase);
+      expect(backend.compareAndSet).toBeUndefined();
 
       const error = yield* backend.write("{}").pipe(Effect.flip);
 

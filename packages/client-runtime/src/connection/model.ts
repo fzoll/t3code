@@ -117,6 +117,7 @@ export type PreparedHttpAuthorization =
     };
 
 export interface PreparedConnection {
+  readonly renewBearerSession?: boolean;
   readonly environmentId: EnvironmentId;
   readonly label: string;
   readonly httpBaseUrl: string;

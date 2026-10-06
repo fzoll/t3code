@@ -110,6 +110,27 @@ describe("DesktopConnectionCatalogStore", () => {
     ),
   );
 
+  it.effect("serializes competing renderer CAS writes with set and clear", () =>
+    withStore(
+      Effect.gen(function* () {
+        const owner = yield* DesktopConnectionCatalogStore.DesktopConnectionCatalogStore;
+        yield* owner.set("original");
+        const results = yield* Effect.all(
+          [owner.compareAndSet("original", "renewed"), owner.compareAndSet("original", "repaired")],
+          { concurrency: "unbounded" },
+        );
+        assert.strictEqual(results.filter(Boolean).length, 1);
+        const current = Option.getOrThrow(yield* owner.get);
+        yield* owner.set("explicit-repair");
+        assert.isFalse(yield* owner.compareAndSet(current, "stale-renewal"));
+        assert.deepStrictEqual(yield* owner.get, Option.some("explicit-repair"));
+        yield* owner.clear;
+        assert.isFalse(yield* owner.compareAndSet("explicit-repair", "resurrected"));
+        assert.deepStrictEqual(yield* owner.get, Option.none());
+      }),
+    ),
+  );
+
   it.effect("does not persist when secure storage is unavailable", () =>
     withStore(
       Effect.gen(function* () {
