@@ -1,6 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
+import { HostResourcesSnapshot } from "./hostResources.ts";
+
 import {
   EnvironmentId,
   ForwardCompatibleOptional,
@@ -180,6 +182,8 @@ export const ExecutionEnvironmentSessionResource = Schema.Struct({
 export type ExecutionEnvironmentSessionResource = typeof ExecutionEnvironmentSessionResource.Type;
 
 export const ExecutionEnvironmentResources = Schema.Struct({
+  /** Optional for older nodes; reuse the same snapshot as the host-resources RPC. */
+  hostResources: Schema.optionalKey(HostResourcesSnapshot),
   /** False means session enumeration failed, never an empty-node proof. */
   sessionsKnown: Schema.optionalKey(Schema.Boolean),
   freeMemoryMb: Schema.Number,

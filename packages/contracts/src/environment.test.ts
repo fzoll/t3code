@@ -52,3 +52,34 @@ describe("ExecutionEnvironmentDescriptor", () => {
     ).toEqual({ maxUploadBytes: 50 * 1024 * 1024 });
   });
 });
+
+describe("environment host-resource snapshots", () => {
+  const resources = { freeMemoryMb: 1024, totalMemoryMb: 2048, sessions: [] };
+  const hostResources = {
+    sampledAt: 1_700_000_000_000,
+    cpuUtilization: 0.25,
+    cpuCount: 8,
+    availableMemoryBytes: 1024 * 1024 * 1024,
+    totalMemoryBytes: 2048 * 1024 * 1024,
+  };
+
+  it("preserves the canonical snapshot through descriptor decoding", () => {
+    expect(
+      decodeDescriptor({ ...descriptor, resources: { ...resources, hostResources } }).resources
+        ?.hostResources,
+    ).toEqual(hostResources);
+  });
+
+  it("continues accepting older nodes without a snapshot", () => {
+    expect(decodeDescriptor({ ...descriptor, resources }).resources?.hostResources).toBeUndefined();
+  });
+
+  it("rejects malformed advertised snapshots instead of treating them as capacity", () => {
+    expect(() =>
+      decodeDescriptor({
+        ...descriptor,
+        resources: { ...resources, hostResources: { ...hostResources, sampledAt: -1 } },
+      }),
+    ).toThrow();
+  });
+});

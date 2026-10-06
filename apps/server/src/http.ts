@@ -320,6 +320,7 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
           return {
             ...descriptor,
             resources: {
+              hostResources: host,
               freeMemoryMb,
               totalMemoryMb,
               sessionsKnown: sessionPids !== null,
@@ -345,6 +346,7 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
         return {
           ...descriptor,
           resources: {
+            hostResources: host,
             freeMemoryMb,
             totalMemoryMb,
             sessionsKnown: true,
