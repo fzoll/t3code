@@ -1,4 +1,5 @@
-import { vi } from "vite-plus/test";
+import * as Clock from "effect/Clock";
+import * as TestClock from "effect/testing/TestClock";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { EnvironmentHttpApi } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
@@ -69,6 +70,7 @@ const postJson = (path: string, body: unknown, headers?: Readonly<Record<string,
 it.effect("sets the selected browser session cookies through the HTTP route", () =>
   Effect.gen(function* () {
     const crypto = yield* Crypto.Crypto;
+    const testClock = yield* TestClock.testClockWith(Effect.succeed);
     const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
       get: () => Effect.succeed(Option.none()),
       set: () => Effect.void,
@@ -78,6 +80,7 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
     });
     const requestContext = Context.make(Crypto.Crypto, crypto).pipe(
       Context.add(ServerSecretStore.ServerSecretStore, unusedSecretStore),
+      Context.add(Clock.Clock, testClock),
     );
     return yield* Effect.acquireUseRelease(
       Effect.sync(
@@ -131,35 +134,29 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           expect(restrictedCookies[0]).toMatch(/^t3_session_/);
           expect(restrictedCookies[0]).not.toContain("t3_dev_session_");
           const originalCookie = restrictedCookies[0]?.split(";", 1)[0] ?? "";
-          const clock = vi
-            .spyOn(Date, "now")
-            .mockReturnValue(Date.now() + 24 * 24 * 60 * 60 * 1_000);
-          try {
-            const renewedResponse = await environmentA.handler(
-              new Request("http://127.0.0.1/api/auth/session", {
-                headers: { cookie: originalCookie },
-              }),
-              requestContext,
-            );
-            expect(renewedResponse.status).toBe(200);
-            const renewedCookie = renewedResponse.headers.getSetCookie()[0];
-            expect(renewedCookie).toContain("HttpOnly");
-            expect(renewedCookie).toContain("SameSite=Lax");
-            expect(renewedCookie?.split(";", 1)[0]).not.toBe(originalCookie);
-            expect(await renewedResponse.json()).toMatchObject({
-              authenticated: true,
-              scopes: ["orchestration:read"],
-            });
-            const replay = await environmentA.handler(
-              new Request("http://127.0.0.1/api/auth/session", {
-                headers: { cookie: renewedCookie?.split(";", 1)[0] ?? "" },
-              }),
-              requestContext,
-            );
-            expect(replay.headers.getSetCookie()).toEqual([]);
-          } finally {
-            clock.mockRestore();
-          }
+          await Effect.runPromise(testClock.adjust("24 days"));
+          const renewedResponse = await environmentA.handler(
+            new Request("http://127.0.0.1/api/auth/session", {
+              headers: { cookie: originalCookie },
+            }),
+            requestContext,
+          );
+          expect(renewedResponse.status).toBe(200);
+          const renewedCookie = renewedResponse.headers.getSetCookie()[0];
+          expect(renewedCookie).toContain("HttpOnly");
+          expect(renewedCookie).toContain("SameSite=Lax");
+          expect(renewedCookie?.split(";", 1)[0]).not.toBe(originalCookie);
+          expect(await renewedResponse.json()).toMatchObject({
+            authenticated: true,
+            scopes: ["orchestration:read"],
+          });
+          const replay = await environmentA.handler(
+            new Request("http://127.0.0.1/api/auth/session", {
+              headers: { cookie: renewedCookie?.split(";", 1)[0] ?? "" },
+            }),
+            requestContext,
+          );
+          expect(replay.headers.getSetCookie()).toEqual([]);
         }),
       ([environmentA, environmentB]) =>
         Effect.promise(() => Promise.all([environmentA.dispose(), environmentB.dispose()])),
