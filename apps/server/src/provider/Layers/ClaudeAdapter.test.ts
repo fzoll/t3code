@@ -2334,6 +2334,14 @@ describe("ClaudeAdapterLive", () => {
 
         const payload = completedTurn(Array.from(yield* Fiber.join(runtimeEventsFiber)));
         assert.equal(payload.state, state);
+        assert.equal(
+          payload.providerAuthEvidence?.reasonCode,
+          errorMessage?.source === "claude auth login" ? "provider_login_required" : undefined,
+        );
+        if (payload.providerAuthEvidence) {
+          assert.equal(payload.providerAuthEvidence.providerSessionId, "sdk-session-auth");
+          assert.equal(payload.providerAuthEvidence.evidenceSource, "provider_error");
+        }
         if (errorMessage === undefined) {
           assert.equal(payload.errorMessage, undefined);
         } else {

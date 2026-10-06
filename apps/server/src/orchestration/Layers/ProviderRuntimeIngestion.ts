@@ -432,6 +432,29 @@ export function runtimeEventToActivities(
       : {};
   })();
   switch (event.type) {
+    case "turn.completed": {
+      const evidence = event.payload.providerAuthEvidence;
+      if (!evidence || !event.turnId) return [];
+      return [
+        {
+          id: event.eventId,
+          createdAt: event.createdAt,
+          tone: evidence.status === "ready" ? "info" : "error",
+          kind: "provider.auth",
+          summary:
+            evidence.status === "ready" ? "Provider authenticated" : "Provider access unavailable",
+          payload: {
+            provider: event.provider,
+            status: evidence.status,
+            reasonCode: evidence.reasonCode,
+            evidenceSource: evidence.evidenceSource,
+            providerSessionId: evidence.providerSessionId,
+          },
+          turnId: toTurnId(event.turnId) ?? null,
+          ...maybeSequence,
+        },
+      ];
+    }
     case "request.opened": {
       if (event.payload.requestType === "tool_user_input") {
         return [];
