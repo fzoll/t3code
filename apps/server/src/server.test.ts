@@ -332,6 +332,7 @@ const TEST_HOST_RESOURCES = {
 };
 
 const expectedPublicDescriptorResources = {
+  hostResources: TEST_HOST_RESOURCES,
   freeMemoryMb: 1024,
   totalMemoryMb: 2048,
   sessionsKnown: true,
@@ -2162,6 +2163,26 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       assert.equal(response.status, 200);
       assert.deepEqual(body, expectedPublicDescriptor);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("retains the host snapshot when session resources are attached", () =>
+    Effect.gen(function* () {
+      const threadId = ThreadId.make("host-snapshot-session");
+      yield* buildAppUnderTest({
+        layers: {
+          providerService: {
+            getSessionPids: () =>
+              Effect.succeed([{ threadId, pid: process.pid, provider: "claudeAgent" }]),
+          },
+        },
+      });
+      const response = yield* fetchEffect(yield* getHttpServerUrl("/.well-known/t3/environment"));
+      const body = yield* responseJsonEffect<typeof expectedPublicDescriptor>(response);
+      assert.equal(response.status, 200);
+      assert.deepEqual(body.resources.hostResources, TEST_HOST_RESOURCES);
+      assert.equal(body.resources.sessionsKnown, true);
+      assert.equal(body.resources.sessions[0]?.threadId, threadId);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
