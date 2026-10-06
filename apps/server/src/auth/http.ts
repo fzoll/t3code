@@ -1,3 +1,5 @@
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import {
   AuthAccessReadScope,
   AuthAccessWriteScope,
@@ -247,6 +249,27 @@ export const authHttpApiLayer = HttpApiBuilder.group(
               sessions.cookieName,
               sessions.legacyCookieName,
             );
+            if (
+              result.authenticated &&
+              result.sessionMethod === "browser-session-cookie" &&
+              (credential?.source === "cookie" || credential?.source === "legacy-cookie")
+            ) {
+              const renewed = yield* sessions.renewBrowser(credential.token).pipe(
+                Effect.catchIf(Schema.is(SessionStore.SessionCredentialInvalidError), () =>
+                  Effect.succeed(Option.none()),
+                ),
+                Effect.catch((error) => failEnvironmentInternal("internal_error", error)),
+              );
+              if (Option.isSome(renewed)) {
+                yield* appendSessionCookie(
+                  sessions.cookieName,
+                  renewed.value.token,
+                  renewed.value.expiresAt,
+                );
+                yield* appendCredentialResponseHeaders;
+                return { ...result, expiresAt: DateTime.toUtc(renewed.value.expiresAt) };
+              }
+            }
             if (
               credential?.source === "legacy-cookie" &&
               result.authenticated &&

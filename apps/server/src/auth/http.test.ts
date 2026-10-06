@@ -1,3 +1,4 @@
+import { vi } from "vite-plus/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { EnvironmentHttpApi } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
@@ -129,6 +130,36 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           expect(restrictedCookies).toHaveLength(1);
           expect(restrictedCookies[0]).toMatch(/^t3_session_/);
           expect(restrictedCookies[0]).not.toContain("t3_dev_session_");
+          const originalCookie = restrictedCookies[0]?.split(";", 1)[0] ?? "";
+          const clock = vi
+            .spyOn(Date, "now")
+            .mockReturnValue(Date.now() + 24 * 24 * 60 * 60 * 1_000);
+          try {
+            const renewedResponse = await environmentA.handler(
+              new Request("http://127.0.0.1/api/auth/session", {
+                headers: { cookie: originalCookie },
+              }),
+              requestContext,
+            );
+            expect(renewedResponse.status).toBe(200);
+            const renewedCookie = renewedResponse.headers.getSetCookie()[0];
+            expect(renewedCookie).toContain("HttpOnly");
+            expect(renewedCookie).toContain("SameSite=Lax");
+            expect(renewedCookie?.split(";", 1)[0]).not.toBe(originalCookie);
+            expect(await renewedResponse.json()).toMatchObject({
+              authenticated: true,
+              scopes: ["orchestration:read"],
+            });
+            const replay = await environmentA.handler(
+              new Request("http://127.0.0.1/api/auth/session", {
+                headers: { cookie: renewedCookie?.split(";", 1)[0] ?? "" },
+              }),
+              requestContext,
+            );
+            expect(replay.headers.getSetCookie()).toEqual([]);
+          } finally {
+            clock.mockRestore();
+          }
         }),
       ([environmentA, environmentB]) =>
         Effect.promise(() => Promise.all([environmentA.dispose(), environmentB.dispose()])),

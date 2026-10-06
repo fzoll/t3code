@@ -1,3 +1,4 @@
+import { maintainBrowserSession } from "../environments/primary/auth";
 import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
@@ -135,6 +136,10 @@ function RootRouteView() {
   const pathname = useLocation({ select: (location) => location.pathname });
   const { authGateState } = Route.useRouteContext();
   const primaryEnvironmentAuthenticated = authGateState.status === "authenticated";
+  useEffect(
+    () => (primaryEnvironmentAuthenticated ? maintainBrowserSession() : undefined),
+    [primaryEnvironmentAuthenticated],
+  );
   const returningFromWelcomeRef = useRef(pathname === "/welcome");
 
   useEffect(() => {

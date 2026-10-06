@@ -98,9 +98,18 @@ export const SetAuthSessionClientConnectionInput = Schema.Struct({
 });
 export type SetAuthSessionClientConnectionInput = typeof SetAuthSessionClientConnectionInput.Type;
 
+export const RenewBrowserSessionInput = Schema.Struct({
+  sessionId: AuthSessionId,
+  now: Schema.DateTimeUtcFromString,
+  expiresAt: Schema.DateTimeUtcFromString,
+});
+
 export class AuthSessionRepository extends Context.Service<
   AuthSessionRepository,
   {
+    readonly renewBrowser: (
+      input: typeof RenewBrowserSessionInput.Type,
+    ) => Effect.Effect<boolean, AuthSessionRepositoryError>;
     readonly create: (
       input: CreateAuthSessionInput,
     ) => Effect.Effect<void, AuthSessionRepositoryError>;
@@ -315,6 +324,28 @@ export const make = Effect.gen(function* () {
       `,
   });
 
+  const renewBrowserRow = SqlSchema.findAll({
+    Request: RenewBrowserSessionInput,
+    Result: Schema.Struct({ sessionId: AuthSessionId }),
+    execute: ({ sessionId, now, expiresAt }) => sql`
+      UPDATE auth_sessions SET expires_at = MAX(expires_at, ${expiresAt})
+      WHERE session_id = ${sessionId} AND method = 'browser-session-cookie'
+        AND revoked_at IS NULL AND expires_at > ${now}
+      RETURNING session_id AS "sessionId"
+    `,
+  });
+  const renewBrowser: AuthSessionRepository["Service"]["renewBrowser"] = (input) =>
+    renewBrowserRow(input).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "AuthSessionRepository.renewBrowser:query",
+          "AuthSessionRepository.renewBrowser:decodeRows",
+          { sessionId: input.sessionId },
+        ),
+      ),
+      Effect.map((rows) => rows.length > 0),
+    );
+
   const setLastConnectedAtRow = SqlSchema.void({
     Request: SetAuthSessionLastConnectedAtInput,
     execute: ({ sessionId, lastConnectedAt }) =>
@@ -509,6 +540,7 @@ export const make = Effect.gen(function* () {
     );
 
   return {
+    renewBrowser,
     create,
     createReplacingActive,
     createIfAbsent,
