@@ -16,6 +16,7 @@ import { sharedServerCommandFlags } from "./cli/config.ts";
 import { isEntrypoint } from "./entrypoint.ts";
 import { projectCommand } from "./cli/project.ts";
 import { runServerCommand, serveCommand, startCommand } from "./cli/server.ts";
+import { routerCommand } from "./cli/router.ts";
 import { serviceCommand } from "./cli/service.ts";
 import { uninstallCommand } from "./cli/uninstall.ts";
 import { updateCommand } from "./cli/update.ts";
@@ -72,6 +73,7 @@ export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
       sshHelperCommand,
       themeCommand,
       triageCommand,
+      routerCommand,
       cloudEnabled ? connectCommand : connectUnavailableCommand,
     ]),
   );
