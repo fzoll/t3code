@@ -186,6 +186,7 @@ const makeRouterHandler = (dependencies: RouterDependencies) => {
                 reachable: true,
                 environmentId: observation.environmentId,
                 hostResources: observation.hostResources,
+                ...(node.webUrl ? { webUrl: node.webUrl } : {}),
               };
             } catch (error) {
               return {
