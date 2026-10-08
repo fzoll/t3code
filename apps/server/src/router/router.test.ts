@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { PlacementError, place, type NodeObservation } from "./placement.ts";
 import { parseRouterConfig, type RouterConfig, type RouterNode } from "./routerConfig.ts";
-import { startRouterServer } from "./routerServer.ts";
+import { redactProjectEnvironment, startRouterServer } from "./routerServer.ts";
 
 const NOW = 1_000_000;
 
@@ -277,6 +277,33 @@ describe("router server", () => {
       (await fetch(`${base}/nodes/zzz/api/orchestration/snapshot`, { headers: auth })).status,
     ).toBe(404);
     expect(calls).toBe(0);
+  });
+
+  it("blanks project environment values in forwarded snapshots", async () => {
+    const base = await start(
+      async () =>
+        new Response(
+          JSON.stringify({
+            projects: [
+              {
+                id: "p",
+                workspaceRoot: "/w",
+                environment: [{ name: "GH_TOKEN", value: "ghp_SECRET", sensitive: false }],
+              },
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const response = await fetch(`${base}/nodes/rpi/api/orchestration/snapshot`, { headers: auth });
+    const text = await response.text();
+    expect(text).not.toContain("ghp_SECRET");
+    expect(JSON.parse(text).projects[0]).toMatchObject({
+      id: "p",
+      workspaceRoot: "/w",
+      environment: [{ name: "GH_TOKEN", value: "", valueRedacted: true }],
+    });
+    expect(() => redactProjectEnvironment(Buffer.from("not json"))).toThrow();
   });
 
   it("places from live descriptors and treats a swapped environment id as unreachable", async () => {
