@@ -135,6 +135,22 @@ describe("place", () => {
     ).toBe("no_eligible_node");
   });
 
+  it("carries the node web origin for thread links", async () => {
+    const withWeb = config([
+      node("rpi", { webUrl: "http://hermes.test:3773/" } as Partial<RouterNode>),
+    ]);
+    const placement = await place(
+      withWeb,
+      { workspace: "w" },
+      observer({ rpi: observation("rpi", 0) }),
+      () => NOW,
+    );
+    expect(placement.webUrl).toBe("http://hermes.test:3773");
+    expect(() => config([node("rpi", { webUrl: "http://u:p@x" } as Partial<RouterNode>)])).toThrow(
+      /webUrl/,
+    );
+  });
+
   it("refuses unknown, disabled or non-hosting dedicated nodes", async () => {
     const all = observer({
       rpi: observation("rpi", 0),

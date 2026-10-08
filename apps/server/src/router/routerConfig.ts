@@ -23,6 +23,8 @@ export interface RouterNode {
   readonly enabled: boolean;
   /** When pinned, a node answering with another environment id is treated as unreachable. */
   readonly environmentId?: string;
+  /** Browser-reachable T3 web origin of this node, used to build thread links for humans. */
+  readonly webUrl?: string;
 }
 
 export interface RouterConfig {
@@ -90,6 +92,25 @@ const parseNode = (value: unknown, index: number): RouterNode => {
   ) {
     fail(`nodes[${index}].environmentId must be a non-empty string`);
   }
+  let webUrl: string | undefined;
+  if (value.webUrl !== undefined) {
+    let parsed: URL;
+    try {
+      parsed = new URL(String(value.webUrl));
+    } catch {
+      return fail(`nodes[${index}].webUrl is not a URL`);
+    }
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      fail(`nodes[${index}].webUrl must be a plain http(s) origin`);
+    }
+    webUrl = parsed.toString().replace(/\/+$/, "");
+  }
   return {
     id,
     baseUrl: baseUrl.toString().replace(/\/+$/, ""),
@@ -99,6 +120,7 @@ const parseNode = (value: unknown, index: number): RouterNode => {
     ...(workspaces ? { workspaces } : {}),
     enabled: value.enabled !== false,
     ...(typeof value.environmentId === "string" ? { environmentId: value.environmentId } : {}),
+    ...(webUrl ? { webUrl } : {}),
   };
 };
 

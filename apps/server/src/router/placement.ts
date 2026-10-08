@@ -25,6 +25,8 @@ export interface Placement {
   readonly environmentId: string;
   readonly workspaceRoot: string;
   readonly reason: "requested" | "load_balanced";
+  /** Browser-reachable T3 web origin; a thread link is `${webUrl}/${environmentId}/${threadId}`. */
+  readonly webUrl?: string;
 }
 
 export class PlacementError extends Error {
@@ -51,6 +53,7 @@ const placementFor = (
   environmentId: observation.environmentId,
   workspaceRoot: NodePath.posix.join(node.workspaceBase, workspace),
   reason,
+  ...(node.webUrl ? { webUrl: node.webUrl } : {}),
 });
 
 export const parsePlacementRequest = (value: unknown): PlacementRequest => {
