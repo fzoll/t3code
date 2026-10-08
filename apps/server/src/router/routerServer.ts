@@ -34,6 +34,35 @@ const FORWARD_TIMEOUT_MS = 60_000;
 
 const decodeHostResources = Schema.decodeUnknownOption(HostResourcesSnapshot);
 
+/**
+ * Project environments hold provider and GitHub credentials. Router callers need project
+ * identity (id, workspace root, deletion), never those values, so the snapshot leaves the
+ * router with every environment value blanked and marked redacted. Unparseable bodies are
+ * withheld rather than passed through.
+ */
+export const redactProjectEnvironment = (body: Buffer): Buffer => {
+  let snapshot: unknown;
+  try {
+    snapshot = JSON.parse(body.toString("utf8"));
+  } catch {
+    throw new HttpFailure(502, "snapshot_unreadable");
+  }
+  const projects = (snapshot as { projects?: unknown })?.projects;
+  if (Array.isArray(projects)) {
+    for (const project of projects) {
+      const environment = (project as { environment?: unknown })?.environment;
+      if (!Array.isArray(environment)) continue;
+      for (const variable of environment) {
+        if (variable && typeof variable === "object") {
+          (variable as Record<string, unknown>).value = "";
+          (variable as Record<string, unknown>).valueRedacted = true;
+        }
+      }
+    }
+  }
+  return Buffer.from(JSON.stringify(snapshot));
+};
+
 export interface RouterDependencies {
   readonly config: () => RouterConfig;
   readonly fetch?: typeof globalThis.fetch;
@@ -155,7 +184,9 @@ const makeRouterHandler = (dependencies: RouterDependencies) => {
     } catch {
       throw new HttpFailure(502, "node_unreachable");
     }
-    const payload = Buffer.from(await upstream.arrayBuffer());
+    let payload: Buffer = Buffer.from(await upstream.arrayBuffer());
+    if (path === "/api/orchestration/snapshot" && upstream.ok)
+      payload = redactProjectEnvironment(payload);
     response.writeHead(upstream.status, {
       "content-type": upstream.headers.get("content-type") ?? "application/octet-stream",
       "cache-control": "no-store",
