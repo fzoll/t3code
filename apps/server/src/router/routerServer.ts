@@ -2,10 +2,12 @@
 // request and response bytes untouched between the caller and the T3 node.
 import * as NodeCrypto from "node:crypto";
 import * as NodeHttp from "node:http";
+import type * as NodeStream from "node:stream";
 
 import { HostResourcesSnapshot } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { WebSocket, WebSocketServer, type RawData } from "ws";
 
 import {
   PlacementError,
@@ -19,6 +21,11 @@ import { readSecret, type RouterConfig, type RouterNode } from "./routerConfig.t
 /**
  * T3 endpoints a caller may reach through `/nodes/<id>`. Everything else stays
  * private to the node, so a router token is not a full node token.
+ *
+ * The websocket ticket route is the HTTP half of `/nodes/<id>/ws`: the caller
+ * mints a ticket with the router token, and the ticket is the only credential the
+ * upgrade carries. A ticket opens the node's whole RPC surface, so the router
+ * relays the socket frame by frame and lets only `FORWARDED_RPC` requests through.
  */
 const FORWARDED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/api\/orchestration\/dispatch$/ },
@@ -26,9 +33,20 @@ const FORWARDED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/api\/orchestration\/threads\/[^/]+$/ },
   { method: "GET", path: /^\/\.well-known\/t3\/environment$/ },
   { method: "GET", path: /^\/api\/auth\/session$/ },
+  { method: "POST", path: /^\/api\/auth\/websocket-ticket$/ },
 ];
 
+/**
+ * RPC methods a caller may invoke over the relayed node socket. Only the WS path
+ * runs `thread.turn.start` bootstrap (thread creation + worktree preparation), which
+ * HTTP dispatch ignores. Other Effect RPC frames (Ack, Interrupt, Ping, Eof, ...)
+ * carry no method and pass through; node-to-caller frames are never filtered.
+ */
+const FORWARDED_RPC: ReadonlySet<string> = new Set(["orchestration.dispatchCommand"]);
+
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
+const MAX_WS_PAYLOAD_BYTES = 8 * 1024 * 1024;
+const WS_CONNECT_TIMEOUT_MS = 10_000;
 const OBSERVE_TIMEOUT_MS = 5_000;
 const FORWARD_TIMEOUT_MS = 60_000;
 
@@ -166,7 +184,9 @@ const makeRouterHandler = (dependencies: RouterDependencies) => {
     if (!FORWARDED.some((rule) => rule.method === method && rule.path.test(path))) {
       throw new HttpFailure(404, "route_not_forwarded");
     }
-    const body = method === "POST" ? await readBody(request) : undefined;
+    const read = method === "POST" ? await readBody(request) : undefined;
+    // The ticket route takes no payload; an empty POST goes out without a body.
+    const body = read && read.length > 0 ? read : undefined;
     let upstream: Response;
     try {
       upstream = await nodeRequest(
@@ -271,6 +291,182 @@ const makeRouterHandler = (dependencies: RouterDependencies) => {
   };
 };
 
+/**
+ * Returns why a caller frame must not reach the node, or null when it may. The
+ * node's JSON serialization also accepts arrays of messages, so only a single
+ * JSON object per text frame is relayed; that keeps every request visible here.
+ */
+export const screenCallerFrame = (data: RawData, isBinary: boolean): string | null => {
+  if (isBinary) return "invalid_frame";
+  let message: unknown;
+  try {
+    message = JSON.parse(rawText(data));
+  } catch {
+    return "invalid_frame";
+  }
+  if (!message || typeof message !== "object" || Array.isArray(message)) return "invalid_frame";
+  const { _tag, tag } = message as { _tag?: unknown; tag?: unknown };
+  if (_tag === "Request" && !(typeof tag === "string" && FORWARDED_RPC.has(tag))) {
+    return "rpc_not_forwarded";
+  }
+  return null;
+};
+
+const rawText = (data: RawData) =>
+  (Array.isArray(data)
+    ? Buffer.concat(data)
+    : Buffer.isBuffer(data)
+      ? data
+      : Buffer.from(data)
+  ).toString("utf8");
+
+const rejectUpgrade = (socket: NodeStream.Duplex, status: number, code: string) => {
+  if (!socket.writable) {
+    socket.destroy();
+    return;
+  }
+  const body = JSON.stringify({ error: code });
+  socket.end(
+    `HTTP/1.1 ${status} ${NodeHttp.STATUS_CODES[status] ?? ""}\r\n` +
+      "Content-Type: application/json\r\n" +
+      "Cache-Control: no-store\r\n" +
+      `Content-Length: ${Buffer.byteLength(body)}\r\n` +
+      "Connection: close\r\n\r\n" +
+      body,
+    () => socket.destroy(),
+  );
+};
+
+/** 1005 and 1006 are reported locally but may never be sent in a close frame. */
+const closePeer = (peer: WebSocket, code: number, reason: Buffer) => {
+  if (peer.readyState === WebSocket.CLOSED) return;
+  if (code === 1005 || code === 1006) {
+    peer.terminate();
+    return;
+  }
+  try {
+    peer.close(code, reason);
+  } catch {
+    peer.terminate();
+  }
+};
+
+/**
+ * Relays a caller WebSocket to a node's `/ws`. The node socket is opened first, so a
+ * caller only sees `101` once the node accepted its ticket; until then a failure is
+ * an ordinary HTTP status on the caller socket.
+ */
+const makeUpgradeHandler = (dependencies: RouterDependencies) => {
+  const callers = new WebSocketServer({ noServer: true, maxPayload: MAX_WS_PAYLOAD_BYTES });
+
+  const relay = (caller: WebSocket, upstream: WebSocket) => {
+    const shutdown = (code: number, reason: string) => {
+      for (const peer of [caller, upstream]) {
+        if (peer.readyState === WebSocket.OPEN) peer.close(code, reason);
+        else peer.terminate();
+      }
+    };
+    caller.on("message", (data, isBinary) => {
+      const refused = screenCallerFrame(data, isBinary);
+      if (refused) {
+        shutdown(1008, refused);
+        return;
+      }
+      upstream.send(rawText(data), { binary: false });
+    });
+    upstream.on("message", (data, isBinary) => {
+      caller.send(data, { binary: isBinary });
+    });
+    caller.on("close", (code, reason) => closePeer(upstream, code, reason));
+    upstream.on("close", (code, reason) => closePeer(caller, code, reason));
+    caller.on("error", () => {
+      caller.terminate();
+      upstream.terminate();
+    });
+    upstream.on("error", () => {
+      upstream.terminate();
+      caller.terminate();
+    });
+  };
+
+  return (request: NodeHttp.IncomingMessage, socket: NodeStream.Duplex, head: Buffer) => {
+    socket.on("error", () => socket.destroy());
+    const url = new URL(request.url ?? "/", "http://router.invalid");
+    const match = /^\/nodes\/([^/]+)\/ws$/.exec(url.pathname);
+    if (!match) {
+      rejectUpgrade(socket, 404, "not_found");
+      return;
+    }
+    let config: RouterConfig;
+    try {
+      config = dependencies.config();
+    } catch {
+      rejectUpgrade(socket, 500, "router_internal_error");
+      return;
+    }
+    const node = config.nodes.find((candidate) => candidate.id === match[1]);
+    if (!node) {
+      rejectUpgrade(socket, 404, "unknown_node");
+      return;
+    }
+    const ticket = url.searchParams.get("wsTicket")?.trim() ?? "";
+    if (!ticket) {
+      rejectUpgrade(socket, 401, "missing_ws_ticket");
+      return;
+    }
+    if (
+      request.headers.upgrade?.toLowerCase() !== "websocket" ||
+      !request.headers["sec-websocket-key"]
+    ) {
+      rejectUpgrade(socket, 400, "invalid_upgrade");
+      return;
+    }
+
+    const target = new URL(node.baseUrl);
+    target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
+    target.pathname = `${target.pathname.replace(/\/$/, "")}/ws`;
+    target.search = new URLSearchParams({ wsTicket: ticket }).toString();
+
+    let settled = false;
+    const upstream = new WebSocket(target, {
+      handshakeTimeout: WS_CONNECT_TIMEOUT_MS,
+      followRedirects: false,
+    });
+    const fail = (status: number, code: string) => {
+      if (settled) return;
+      settled = true;
+      upstream.terminate();
+      rejectUpgrade(socket, status, code);
+    };
+    // The caller may hang up while the node handshake is still in flight.
+    const abandon = () => {
+      if (settled) return;
+      settled = true;
+      upstream.terminate();
+    };
+    socket.once("close", abandon);
+    upstream.once("unexpected-response", (_request, response) => {
+      response.resume();
+      const status = response.statusCode ?? 502;
+      fail(status === 401 || status === 403 ? status : 502, "node_rejected_upgrade");
+    });
+    upstream.on("error", () => fail(502, "node_unreachable"));
+    upstream.once("open", () => {
+      if (settled) return;
+      settled = true;
+      socket.off("close", abandon);
+      // If the caller handshake turns out invalid, ws aborts it and destroys the
+      // socket without invoking the callback; the node socket must not outlive it.
+      const orphan = () => upstream.terminate();
+      socket.once("close", orphan);
+      callers.handleUpgrade(request, socket, head, (caller) => {
+        socket.off("close", orphan);
+        relay(caller, upstream);
+      });
+    });
+  };
+};
+
 export const startRouterServer = (
   dependencies: RouterDependencies,
   listen: { readonly host: string; readonly port: number },
@@ -280,6 +476,7 @@ export const startRouterServer = (
     const server = NodeHttp.createServer((request, response) => {
       void handler(request, response);
     });
+    server.on("upgrade", makeUpgradeHandler(dependencies));
     server.once("error", reject);
     server.listen(listen.port, listen.host, () => {
       server.off("error", reject);
