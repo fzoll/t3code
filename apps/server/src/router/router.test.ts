@@ -280,6 +280,24 @@ describe("router server", () => {
     expect(calls).toBe(0);
   });
 
+  it("blanks project environment values in the forwarded thread shell", async () => {
+    const base = await start(
+      async () =>
+        new Response(
+          JSON.stringify({
+            projects: [{ id: "p", environment: [{ name: "GH_TOKEN", value: "ghp_SECRET" }] }],
+            threads: [{ id: "t", hasPendingUserInput: true, hasPendingApprovals: false }],
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const response = await fetch(`${base}/nodes/rpi/api/orchestration/shell`, { headers: auth });
+    const text = await response.text();
+    expect(response.status).toBe(200);
+    expect(text).not.toContain("ghp_SECRET");
+    expect(JSON.parse(text).threads[0]).toMatchObject({ id: "t", hasPendingUserInput: true });
+  });
+
   it("blanks project environment values in forwarded snapshots", async () => {
     const base = await start(
       async () =>
