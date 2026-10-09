@@ -30,6 +30,9 @@ import { readSecret, type RouterConfig, type RouterNode } from "./routerConfig.t
 const FORWARDED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/api\/orchestration\/dispatch$/ },
   { method: "GET", path: /^\/api\/orchestration\/snapshot$/ },
+  // Thread shell: per-thread status flags (hasPendingUserInput, hasPendingApprovals) for callers
+  // that must notice a turn waiting on a human.
+  { method: "GET", path: /^\/api\/orchestration\/shell$/ },
   { method: "GET", path: /^\/api\/orchestration\/threads\/[^/]+$/ },
   { method: "GET", path: /^\/\.well-known\/t3\/environment$/ },
   { method: "GET", path: /^\/api\/auth\/session$/ },
@@ -43,6 +46,12 @@ const FORWARDED: ReadonlyArray<{ method: string; path: RegExp }> = [
  * carry no method and pass through; node-to-caller frames are never filtered.
  */
 const FORWARDED_RPC: ReadonlySet<string> = new Set(["orchestration.dispatchCommand"]);
+
+/** Responses that carry project environments; their values never leave the router. */
+const REDACTED_SNAPSHOTS: ReadonlySet<string> = new Set([
+  "/api/orchestration/snapshot",
+  "/api/orchestration/shell",
+]);
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const MAX_WS_PAYLOAD_BYTES = 8 * 1024 * 1024;
@@ -205,8 +214,7 @@ const makeRouterHandler = (dependencies: RouterDependencies) => {
       throw new HttpFailure(502, "node_unreachable");
     }
     let payload: Buffer = Buffer.from(await upstream.arrayBuffer());
-    if (path === "/api/orchestration/snapshot" && upstream.ok)
-      payload = redactProjectEnvironment(payload);
+    if (REDACTED_SNAPSHOTS.has(path) && upstream.ok) payload = redactProjectEnvironment(payload);
     response.writeHead(upstream.status, {
       "content-type": upstream.headers.get("content-type") ?? "application/octet-stream",
       "cache-control": "no-store",
