@@ -4,7 +4,12 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeHttp from "node:http";
 import type * as NodeStream from "node:stream";
 
-import { HostResourcesSnapshot } from "@t3tools/contracts";
+import {
+  HostResourcesSnapshot,
+  ORCHESTRATION_PROTOCOL_HEADER,
+  ORCHESTRATION_PROTOCOL_QUERY_PARAM,
+  ORCHESTRATION_PROTOCOL_VERSION_TEXT,
+} from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
@@ -28,29 +33,27 @@ import { readSecret, type RouterConfig, type RouterNode } from "./routerConfig.t
  * relays the socket frame by frame and lets only `FORWARDED_RPC` requests through.
  */
 const FORWARDED: ReadonlyArray<{ method: string; path: RegExp }> = [
-  { method: "POST", path: /^\/api\/orchestration\/dispatch$/ },
-  { method: "GET", path: /^\/api\/orchestration\/snapshot$/ },
-  // Thread shell: per-thread status flags (hasPendingUserInput, hasPendingApprovals) for callers
-  // that must notice a turn waiting on a human.
+  // Thread shell: per-thread status and pending-request flags for callers that must notice a
+  // run waiting on a human.
   { method: "GET", path: /^\/api\/orchestration\/shell$/ },
-  { method: "GET", path: /^\/api\/orchestration\/threads\/[^/]+$/ },
+  { method: "GET", path: /^\/api\/orchestration\/threads\/[^/]+(\/bounded)?$/ },
+  { method: "GET", path: /^\/api\/projects$/ },
+  { method: "POST", path: /^\/api\/projects\/mutate$/ },
   { method: "GET", path: /^\/\.well-known\/t3\/environment$/ },
   { method: "GET", path: /^\/api\/auth\/session$/ },
   { method: "POST", path: /^\/api\/auth\/websocket-ticket$/ },
 ];
 
 /**
- * RPC methods a caller may invoke over the relayed node socket. Only the WS path
- * runs `thread.turn.start` bootstrap (thread creation + worktree preparation), which
- * HTTP dispatch ignores. Other Effect RPC frames (Ack, Interrupt, Ping, Eof, ...)
- * carry no method and pass through; node-to-caller frames are never filtered.
+ * RPC methods a caller may invoke over the relayed node socket. Orchestration v2 takes
+ * every command over the socket (there is no HTTP dispatch), and `launchThread` is the
+ * only way to create a thread with its workspace and first message. Other Effect RPC
+ * frames (Ack, Interrupt, Ping, Eof, ...) carry no method and pass through; node-to-caller
+ * frames are never filtered.
  */
-const FORWARDED_RPC: ReadonlySet<string> = new Set(["orchestration.dispatchCommand"]);
-
-/** Responses that carry project environments; their values never leave the router. */
-const REDACTED_SNAPSHOTS: ReadonlySet<string> = new Set([
-  "/api/orchestration/snapshot",
-  "/api/orchestration/shell",
+const FORWARDED_RPC: ReadonlySet<string> = new Set([
+  "orchestration.dispatchCommand",
+  "orchestration.launchThread",
 ]);
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
@@ -61,33 +64,42 @@ const FORWARD_TIMEOUT_MS = 60_000;
 
 const decodeHostResources = Schema.decodeUnknownOption(HostResourcesSnapshot);
 
-/**
- * Project environments hold provider and GitHub credentials. Router callers need project
- * identity (id, workspace root, deletion), never those values, so the snapshot leaves the
- * router with every environment value blanked and marked redacted. Unparseable bodies are
- * withheld rather than passed through.
- */
-export const redactProjectEnvironment = (body: Buffer): Buffer => {
-  let snapshot: unknown;
-  try {
-    snapshot = JSON.parse(body.toString("utf8"));
-  } catch {
-    throw new HttpFailure(502, "snapshot_unreadable");
+const blankEnvironments = (value: unknown): void => {
+  if (Array.isArray(value)) {
+    for (const item of value) blankEnvironments(item);
+    return;
   }
-  const projects = (snapshot as { projects?: unknown })?.projects;
-  if (Array.isArray(projects)) {
-    for (const project of projects) {
-      const environment = (project as { environment?: unknown })?.environment;
-      if (!Array.isArray(environment)) continue;
-      for (const variable of environment) {
-        if (variable && typeof variable === "object") {
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "environment" && Array.isArray(child)) {
+      for (const variable of child) {
+        if (variable && typeof variable === "object" && "name" in variable) {
           (variable as Record<string, unknown>).value = "";
           (variable as Record<string, unknown>).valueRedacted = true;
         }
       }
+    } else {
+      blankEnvironments(child);
     }
   }
-  return Buffer.from(JSON.stringify(snapshot));
+};
+
+/**
+ * Project environments hold provider and GitHub credentials, and v2 returns them wherever a
+ * project appears (shell, `/api/projects`, a mutation's result). Router callers need project
+ * identity (id, workspace root, deletion), never those values, so every forwarded body leaves
+ * the router with each environment value blanked and marked redacted. Unparseable bodies are
+ * withheld rather than passed through.
+ */
+export const redactProjectEnvironment = (body: Buffer): Buffer => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body.toString("utf8"));
+  } catch {
+    throw new HttpFailure(502, "snapshot_unreadable");
+  }
+  blankEnvironments(parsed);
+  return Buffer.from(JSON.stringify(parsed));
 };
 
 export interface RouterDependencies {
@@ -203,9 +215,14 @@ const makeRouterHandler = (dependencies: RouterDependencies) => {
         `${path}${search}`,
         {
           method,
-          headers: body
-            ? { "content-type": request.headers["content-type"] ?? "application/json" }
-            : {},
+          headers: {
+            // Every v2 orchestration read is refused without it; the router and its nodes
+            // run the same build, so it speaks for the caller.
+            [ORCHESTRATION_PROTOCOL_HEADER]: ORCHESTRATION_PROTOCOL_VERSION_TEXT,
+            ...(body
+              ? { "content-type": request.headers["content-type"] ?? "application/json" }
+              : {}),
+          },
           ...(body ? { body: new Uint8Array(body) } : {}),
         },
         FORWARD_TIMEOUT_MS,
@@ -214,7 +231,7 @@ const makeRouterHandler = (dependencies: RouterDependencies) => {
       throw new HttpFailure(502, "node_unreachable");
     }
     let payload: Buffer = Buffer.from(await upstream.arrayBuffer());
-    if (REDACTED_SNAPSHOTS.has(path) && upstream.ok) payload = redactProjectEnvironment(payload);
+    if (upstream.ok && payload.length > 0) payload = redactProjectEnvironment(payload);
     response.writeHead(upstream.status, {
       "content-type": upstream.headers.get("content-type") ?? "application/octet-stream",
       "cache-control": "no-store",
@@ -433,7 +450,10 @@ const makeUpgradeHandler = (dependencies: RouterDependencies) => {
     const target = new URL(node.baseUrl);
     target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
     target.pathname = `${target.pathname.replace(/\/$/, "")}/ws`;
-    target.search = new URLSearchParams({ wsTicket: ticket }).toString();
+    target.search = new URLSearchParams({
+      wsTicket: ticket,
+      [ORCHESTRATION_PROTOCOL_QUERY_PARAM]: ORCHESTRATION_PROTOCOL_VERSION_TEXT,
+    }).toString();
 
     let settled = false;
     const upstream = new WebSocket(target, {

@@ -1,12 +1,12 @@
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 import { GitWorkflowService } from "./GitWorkflowService.ts";
 import { preparePipelineWorktree } from "./PipelineWorktree.ts";
-import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 
-const suite = it.layer(SqlitePersistenceMemory);
+const suite = it.layer(SqlitePersistence.layerMemory);
 suite("durable pipeline workspace", (it) => {
   it.effect("replays a saved receipt without another fetch or worktree creation", () =>
     Effect.gen(function* () {
