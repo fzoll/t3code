@@ -1,4 +1,4 @@
-import * as Encoding from "effect/Encoding";
+import * as Base64Url from "effect/encoding/Base64Url";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
@@ -19,7 +19,7 @@ export const bearerRenewalDelay = (token: string, now: number): number | undefin
   try {
     const parts = token.split(".");
     if (parts.length !== 2) return undefined;
-    const payload = decode(Result.getOrThrow(Encoding.decodeBase64UrlString(parts[0]!)));
+    const payload = decode(Result.getOrThrow(Base64Url.decodeString(parts[0]!)));
     if (!Number.isFinite(payload.exp)) return undefined;
     return Math.max(0, payload.exp - now - RENEWAL_WINDOW_MS);
   } catch {

@@ -1,13 +1,10 @@
 import { EnvironmentAuthenticatedPrincipal } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type * as Types from "effect/Types";
-import { McpProtocol, McpServer } from "effect/unstable/ai";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
-import packageJson from "../../../package.json" with { type: "json" };
 import * as EnvironmentAuth from "../../auth/EnvironmentAuth.ts";
-import { normalizeMcpHttpResponse } from "../McpHttpServer.ts";
+import * as McpHttpServer from "../McpHttpServer.ts";
 import { ExternalToolkitHandlersLive } from "./handlers.ts";
 import { ExternalToolkit } from "./tools.ts";
 
@@ -47,7 +44,7 @@ const makeAuthMiddleware = EnvironmentAuth.EnvironmentAuth.pipe(
           ...session.value,
           scopes: new Set(session.value.scopes),
         }),
-        Effect.map(normalizeMcpHttpResponse),
+        Effect.map(McpHttpServer.normalizeMcpHttpResponse),
       );
     }),
   ),
@@ -58,20 +55,16 @@ const ExternalMcpAuthMiddlewareLive = HttpRouter.middleware<{
   provides: EnvironmentAuthenticatedPrincipal;
 }>()(makeAuthMiddleware).layer;
 
-const ExternalMcpTransportLive = McpServer.layerHttp({
+/**
+ * `/mcp/external`: the diagnostic toolkit for operators holding an environment
+ * bearer token, read tools under its read scope and operate tools under its
+ * operate scope (see `handlers.ts`). It has its own registry, separate from the
+ * provider-session `/mcp` endpoint.
+ */
+export const layer = McpHttpServer.layerEnvironmentTokenEndpoint({
   name: "T3 Code Diagnostics",
-  version: packageJson.version,
   path: "/mcp/external",
-  protocols: [McpProtocol.v2025_06_18],
-}).pipe(Layer.provide(ExternalMcpAuthMiddlewareLive));
-
-// Layer.fresh wraps toolkit registration and transport together so both
-// resolve one private McpServer registry: the module-level McpServer.layer
-// is otherwise memoized across transports and the diagnostic toolkit would
-// leak into the provider-session /mcp endpoint (and vice versa).
-export const layer = Layer.fresh(
-  McpServer.toolkit(ExternalToolkit).pipe(
-    Layer.provide(ExternalToolkitHandlersLive),
-    Layer.provideMerge(ExternalMcpTransportLive),
-  ),
-);
+  authMiddleware: ExternalMcpAuthMiddlewareLive,
+  toolkit: ExternalToolkit,
+  handlers: ExternalToolkitHandlersLive,
+});

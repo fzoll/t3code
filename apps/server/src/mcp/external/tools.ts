@@ -1,25 +1,23 @@
 import {
   EnvironmentAuthenticatedPrincipal,
   HostResourcesSnapshot,
+  RunId,
   ServerProcessDiagnosticsResult,
   ThreadId,
-  TurnId,
 } from "@t3tools/contracts";
+import * as Crypto from "effect/Crypto";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { Tool, Toolkit } from "effect/unstable/ai";
+import * as SqlClient from "effect/sql/SqlClient";
+import { Tool, Toolkit } from "effect/ai";
 
 import * as ServerConfig from "../../config.ts";
 import * as ProcessDiagnostics from "../../diagnostics/ProcessDiagnostics.ts";
 import * as ServerEnvironment from "../../environment/ServerEnvironment.ts";
-import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
-import { ProjectionSnapshotQuery } from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
-import { ProviderRegistry } from "../../provider/Services/ProviderRegistry.ts";
-import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import * as ProjectStore from "../../orchestration-v2/ProjectStore.ts";
+import * as ThreadManagementService from "../../orchestration-v2/ThreadManagementService.ts";
+import * as ProviderRegistry from "../../provider/ProviderRegistry.ts";
 import { HostResources } from "../../resourceTelemetry/HostResources.ts";
-import * as WorkspacePaths from "../../workspace/WorkspacePaths.ts";
 
 export class ExternalDiagnosticsError extends Schema.TaggedError<ExternalDiagnosticsError>()(
   "ExternalDiagnosticsError",
@@ -33,16 +31,14 @@ const dependencies = [
   EnvironmentAuthenticatedPrincipal,
   ServerConfig.ServerConfig,
   ServerEnvironment.ServerEnvironment,
-  ProviderService,
-  ProviderRegistry,
+  ProviderRegistry.ProviderRegistry,
   ProcessDiagnostics.ProcessDiagnostics,
   HostResources,
-  ProjectionSnapshotQuery,
-  OrchestrationEngineService,
+  ThreadManagementService.ThreadManagementService,
+  ProjectStore.ProjectStoreV2,
   FileSystem.FileSystem,
-  Path.Path,
   SqlClient.SqlClient,
-  WorkspacePaths.WorkspacePaths,
+  Crypto.Crypto,
 ];
 
 const readonlyTool = <T extends Tool.Any>(tool: T): T =>
@@ -106,7 +102,7 @@ export const ThreadsListEntry = Schema.Struct({
 const ThreadsListTool = readonlyTool(
   Tool.make("t3_threads_list", {
     description:
-      "List threads with project, provider, model, run status, and pending approval/input flags. filter: 'active' returns only threads with a running turn; 'recent' (default) returns the most recently updated; 'all' returns everything including archived.",
+      "List threads with project, provider, model, run status, and pending approval/input flags. filter: 'active' returns only threads with an active run; 'recent' (default) returns the most recently updated; 'all' returns everything including archived.",
     parameters: Schema.Struct({
       filter: Schema.optional(Schema.Literals(["active", "recent", "all"])),
       limit: Schema.optional(Schema.Int),
@@ -120,7 +116,7 @@ const ThreadsListTool = readonlyTool(
 const ThreadDetailTool = readonlyTool(
   Tool.make("t3_thread_detail", {
     description:
-      "Detailed thread snapshot: turn history, messages, activities, checkpoints, pending approvals and user-input requests, session state, worktree path.",
+      "Detailed thread snapshot: thread shell (status, branch, worktree path), runs, provider sessions, pending approvals and user-input requests, recent messages, recent activities (turn items, payloads omitted) and checkpoints.",
     parameters: Schema.Struct({ threadId: ThreadId }),
     success: Schema.Unknown,
     failure: ExternalDiagnosticsError,
@@ -180,10 +176,10 @@ const MigrationsStatusTool = readonlyTool(
 const ThreadInterruptTool = operateTool(
   Tool.make("t3_thread_interrupt", {
     description:
-      "Interrupt a running turn on a thread. Pass turnId to target a specific turn; omit it to interrupt the thread's active turn.",
+      "Interrupt a running run on a thread. Pass runId to target a specific run; omit it to interrupt the thread's active run.",
     parameters: Schema.Struct({
       threadId: ThreadId,
-      turnId: Schema.optional(TurnId),
+      runId: Schema.optional(RunId),
     }),
     success: Schema.Unknown,
     failure: ExternalDiagnosticsError,
@@ -193,7 +189,8 @@ const ThreadInterruptTool = operateTool(
 
 const ThreadStopTool = operateTool(
   Tool.make("t3_thread_stop", {
-    description: "Stop the provider session backing a thread.",
+    description:
+      "Stop a thread, whatever it is doing: interrupts its running turn, holds its queue, ends its pull request watches and stops its delegated tasks.",
     parameters: Schema.Struct({ threadId: ThreadId }),
     success: Schema.Unknown,
     failure: ExternalDiagnosticsError,

@@ -9,20 +9,20 @@
  */
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command, Flag } from "effect/cli";
 
 import { makeConfigSource } from "../router/routerConfig.ts";
 import { startRouterServer } from "../router/routerServer.ts";
 
 export const routerCommand = Command.make("router", {
-  config: Flag.string("config").pipe(
+  config: Flag.String("config").pipe(
     Flag.withDescription("Path to the router node registry JSON."),
   ),
-  host: Flag.string("host").pipe(
+  host: Flag.String("host").pipe(
     Flag.withDescription("Listen address; keep it loopback or tailnet-only."),
     Flag.withDefault("127.0.0.1"),
   ),
-  port: Flag.integer("port").pipe(Flag.withDescription("Listen port."), Flag.withDefault(3780)),
+  port: Flag.Int("port").pipe(Flag.withDescription("Listen port."), Flag.withDefault(3780)),
 }).pipe(
   Command.withDescription("Route T3 orchestration work across several T3 servers."),
   Command.withHandler(({ config, host, port }) =>

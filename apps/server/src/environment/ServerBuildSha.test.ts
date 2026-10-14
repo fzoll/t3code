@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { vi } from "vite-plus/test";
 
 import * as ProcessRunner from "../processRunner.ts";

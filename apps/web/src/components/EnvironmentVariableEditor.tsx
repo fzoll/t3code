@@ -114,9 +114,8 @@ export function EnvironmentVariableEditor(props: {
         <span className="text-xs font-medium text-foreground">Environment variables</span>
         <Button
           type="button"
-          size="sm"
+          size="xs"
           variant="outline"
-          className="h-7 gap-1.5 px-2 text-xs"
           onClick={() =>
             setRowsAndRef([
               ...rows,
@@ -129,7 +128,7 @@ export function EnvironmentVariableEditor(props: {
             ])
           }
         >
-          <PlusIcon className="size-3" />
+          <PlusIcon aria-hidden />
           Add
         </Button>
       </div>
@@ -139,10 +138,10 @@ export function EnvironmentVariableEditor(props: {
             "Add variables to pass API keys, tokens, or other per-project settings to Claude Code sessions."}
         </p>
       ) : (
-        <div className="overflow-hidden rounded-md border border-border/70">
-          <Table>
-            <TableHeader className="bg-muted/25 text-[11px] text-muted-foreground">
-              <TableRow className="hover:bg-transparent">
+        <div className="overflow-hidden rounded-lg border border-border">
+          <Table aria-label="Environment variables">
+            <TableHeader>
+              <TableRow>
                 <TableHead>Variable</TableHead>
                 <TableHead>Value</TableHead>
                 <TableHead className="w-20">Sensitive</TableHead>
@@ -153,10 +152,7 @@ export function EnvironmentVariableEditor(props: {
             </TableHeader>
             <TableBody>
               {rows.map((variable, index) => (
-                <TableRow
-                  key={variable.id}
-                  className="border-border/60 odd:bg-muted/20 even:bg-background/20"
-                >
+                <TableRow key={variable.id}>
                   <TableCell>
                     <DraftInput
                       value={variable.name}
@@ -203,8 +199,7 @@ export function EnvironmentVariableEditor(props: {
                       <Button
                         type="button"
                         size="icon-sm"
-                        variant="ghost"
-                        className="size-8 text-muted-foreground hover:text-destructive"
+                        variant="ghost-destructive"
                         onClick={() => removeVariable(variable.id)}
                         aria-label={`Remove environment variable ${variable.name || index + 1}`}
                       >

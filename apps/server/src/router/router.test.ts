@@ -222,6 +222,7 @@ describe("router server", () => {
       url: string;
       method: string;
       authorization: string | null;
+      protocol: string | null;
       body: string | null;
     }> = [];
     const base = await start(async (input, init) => {
@@ -230,6 +231,7 @@ describe("router server", () => {
         url: String(input),
         method: init?.method ?? "GET",
         authorization: headers.get("authorization"),
+        protocol: headers.get("x-t3-orchestration-protocol"),
         body: init?.body ? Buffer.from(init.body as Uint8Array).toString("utf8") : null,
       });
       return new Response(JSON.stringify({ accepted: true }), {
@@ -242,24 +244,26 @@ describe("router server", () => {
     });
     expect(threads.status).toBe(202);
     expect(threads.headers.get("x-t3-router-node")).toBe("rpi");
-    const dispatch = await fetch(`${base}/nodes/mac/api/orchestration/dispatch`, {
+    const mutate = await fetch(`${base}/nodes/mac/api/projects/mutate`, {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },
-      body: JSON.stringify({ type: "thread.turn.start" }),
+      body: JSON.stringify({ type: "project.create" }),
     });
-    expect(await dispatch.json()).toEqual({ accepted: true });
+    expect(await mutate.json()).toEqual({ accepted: true });
     expect(seen).toEqual([
       {
         url: "http://rpi.test:3773/api/orchestration/threads/t-1?turnLimit=5",
         method: "GET",
         authorization: "Bearer rpi-secret",
+        protocol: "2",
         body: null,
       },
       {
-        url: "http://mac.test:3773/api/orchestration/dispatch",
+        url: "http://mac.test:3773/api/projects/mutate",
         method: "POST",
         authorization: "Bearer mac-secret",
-        body: '{"type":"thread.turn.start"}',
+        protocol: "2",
+        body: '{"type":"project.create"}',
       },
     ]);
   });
@@ -271,12 +275,22 @@ describe("router server", () => {
       return new Response("{}");
     });
     expect((await fetch(`${base}/nodes/rpi/api/settings`, { headers: auth })).status).toBe(404);
+    expect((await fetch(`${base}/nodes/rpi/api/projects/mutate`, { headers: auth })).status).toBe(
+      404,
+    );
+    // v1 routes the adapter used before orchestration v2 are gone from the allowlist.
     expect(
-      (await fetch(`${base}/nodes/rpi/api/orchestration/dispatch`, { headers: auth })).status,
+      (
+        await fetch(`${base}/nodes/rpi/api/orchestration/dispatch`, {
+          method: "POST",
+          headers: auth,
+        })
+      ).status,
     ).toBe(404);
     expect(
-      (await fetch(`${base}/nodes/zzz/api/orchestration/snapshot`, { headers: auth })).status,
+      (await fetch(`${base}/nodes/rpi/api/orchestration/snapshot`, { headers: auth })).status,
     ).toBe(404);
+    expect((await fetch(`${base}/nodes/zzz/api/projects`, { headers: auth })).status).toBe(404);
     expect(calls).toBe(0);
   });
 
@@ -298,7 +312,7 @@ describe("router server", () => {
     expect(JSON.parse(text).threads[0]).toMatchObject({ id: "t", hasPendingUserInput: true });
   });
 
-  it("blanks project environment values in forwarded snapshots", async () => {
+  it("blanks project environment values in forwarded project reads and mutations", async () => {
     const base = await start(
       async () =>
         new Response(
@@ -314,7 +328,7 @@ describe("router server", () => {
           { headers: { "content-type": "application/json" } },
         ),
     );
-    const response = await fetch(`${base}/nodes/rpi/api/orchestration/snapshot`, { headers: auth });
+    const response = await fetch(`${base}/nodes/rpi/api/projects`, { headers: auth });
     const text = await response.text();
     expect(text).not.toContain("ghp_SECRET");
     expect(JSON.parse(text).projects[0]).toMatchObject({
@@ -322,6 +336,14 @@ describe("router server", () => {
       workspaceRoot: "/w",
       environment: [{ name: "GH_TOKEN", value: "", valueRedacted: true }],
     });
+    const mutated = JSON.parse(
+      redactProjectEnvironment(
+        Buffer.from(
+          JSON.stringify({ id: "p", environment: [{ name: "GH_TOKEN", value: "ghp_SECRET" }] }),
+        ),
+      ).toString("utf8"),
+    );
+    expect(mutated.environment).toEqual([{ name: "GH_TOKEN", value: "", valueRedacted: true }]);
     expect(() => redactProjectEnvironment(Buffer.from("not json"))).toThrow();
   });
 
@@ -484,11 +506,11 @@ describe("router websocket relay", () => {
     _tag: "Request",
     id: "1",
     tag: "orchestration.dispatchCommand",
-    payload: { type: "thread.turn.start" },
+    payload: { type: "message.dispatch" },
     headers: [],
   };
 
-  it("relays allowed RPC frames and node replies, forwarding only the ticket", async () => {
+  it("relays allowed RPC frames and node replies, forwarding only the ticket and protocol", async () => {
     const fake = await startNode();
     const router = await startRouter(fake.baseUrl);
     const { socket } = await connect(`${router}/nodes/rpi/ws?wsTicket=t-1&clientSurface=x`);
@@ -500,7 +522,7 @@ describe("router websocket relay", () => {
       requestId: "1",
       exit: { _tag: "Success", value: { sequence: 7 } },
     });
-    expect(fake.upgrades).toEqual(["/ws?wsTicket=t-1"]);
+    expect(fake.upgrades).toEqual(["/ws?wsTicket=t-1&orchestrationProtocol=2"]);
     expect(fake.frames).toEqual([{ _tag: "Ping" }, dispatch]);
     const done = closed(socket!);
     socket!.close(1000, "bye");
@@ -533,7 +555,7 @@ describe("router websocket relay", () => {
     expect((await connect(`${router}/nodes/rpi/ws`)).status).toBe(401);
     expect((await connect(`${router}/nodes/rpi/ws?wsTicket=wrong`)).status).toBe(401);
     expect((await connect(`${router}/nodes/down/ws?wsTicket=t-1`)).status).toBe(502);
-    expect(fake.upgrades).toEqual(["/ws?wsTicket=wrong"]);
+    expect(fake.upgrades).toEqual(["/ws?wsTicket=wrong&orchestrationProtocol=2"]);
   });
 
   it("screens caller frames", () => {
