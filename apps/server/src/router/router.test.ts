@@ -5,7 +5,7 @@ import type * as NodeNet from "node:net";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { WebSocket, WebSocketServer } from "ws";
 
-import { PlacementError, place, type NodeObservation } from "./placement.ts";
+import { PlacementError, parsePlacementRequest, place, type NodeObservation } from "./placement.ts";
 import { parseRouterConfig, type RouterConfig, type RouterNode } from "./routerConfig.ts";
 import { redactProjectEnvironment, screenCallerFrame, startRouterServer } from "./routerServer.ts";
 
@@ -150,6 +150,74 @@ describe("place", () => {
     expect(() => config([node("rpi", { webUrl: "http://u:p@x" } as Partial<RouterNode>)])).toThrow(
       /webUrl/,
     );
+  });
+
+  it("uses a live preferred node even when another one is idler", async () => {
+    const placement = await place(
+      registry,
+      { workspace: "RPI_Hermes", prefer: ["mac"] },
+      observer({ rpi: observation("rpi", 0), mac: observation("mac", 0.9) }),
+      () => NOW,
+    );
+    expect(placement).toEqual({
+      nodeId: "mac",
+      environmentId: "env-mac",
+      workspaceRoot: "/work/mac/RPI_Hermes",
+      reason: "preferred",
+    });
+  });
+
+  it("falls back to load balancing when the preferred node is unreachable", async () => {
+    let macProbes = 0;
+    const placement = await place(
+      registry,
+      { workspace: "RPI_Hermes", prefer: ["nope", "mac"] },
+      async (target) => {
+        if (target.id === "mac") {
+          macProbes += 1;
+          throw new Error("asleep");
+        }
+        return observation(target.id, 0.5);
+      },
+      () => NOW,
+    );
+    expect(placement.nodeId).toBe("rpi");
+    expect(placement.reason).toBe("load_balanced");
+    expect(macProbes).toBe(1);
+  });
+
+  it("skips a preferred node that does not host the workspace", async () => {
+    const placement = await place(
+      registry,
+      { workspace: "RPI_Hermes", prefer: ["ha"] },
+      observer({ rpi: observation("rpi", 0.2), mac: new Error("down"), ha: observation("ha", 0) }),
+      () => NOW,
+    );
+    expect(placement.nodeId).toBe("rpi");
+    expect(placement.reason).toBe("load_balanced");
+  });
+
+  it("lets a dedicated node win over preferences", async () => {
+    const placement = await place(
+      registry,
+      { workspace: "RPI_Hermes", node: "rpi", prefer: ["mac"] },
+      observer({ rpi: observation("rpi", 0.9), mac: observation("mac", 0) }),
+      () => NOW,
+    );
+    expect(placement.nodeId).toBe("rpi");
+    expect(placement.reason).toBe("requested");
+  });
+
+  it("parses and validates preferences", () => {
+    expect(parsePlacementRequest({ workspace: "w", prefer: ["mac", "rpi"] })).toEqual({
+      workspace: "w",
+      prefer: ["mac", "rpi"],
+    });
+    expect(parsePlacementRequest({ workspace: "w", prefer: [] })).toEqual({ workspace: "w" });
+    expect(() => parsePlacementRequest({ workspace: "w", prefer: "mac" })).toThrow(
+      /invalid_prefer/,
+    );
+    expect(() => parsePlacementRequest({ workspace: "w", prefer: [""] })).toThrow(/invalid_prefer/);
   });
 
   it("refuses unknown, disabled or non-hosting dedicated nodes", async () => {
