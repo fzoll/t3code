@@ -18,13 +18,18 @@ export interface PlacementRequest {
   readonly workspace: string;
   /** A dedicated node from the request always wins over load balancing. */
   readonly node?: string;
+  /**
+   * Preferred nodes, in order. The first one that is enabled, hosts the workspace and answers is
+   * used; when none does, placement falls back to load balancing. Unknown ids are skipped.
+   */
+  readonly prefer?: ReadonlyArray<string>;
 }
 
 export interface Placement {
   readonly nodeId: string;
   readonly environmentId: string;
   readonly workspaceRoot: string;
-  readonly reason: "requested" | "load_balanced";
+  readonly reason: "requested" | "preferred" | "load_balanced";
   /** Browser-reachable T3 web origin; a thread link is `${webUrl}/${environmentId}/${threadId}`. */
   readonly webUrl?: string;
 }
@@ -58,7 +63,7 @@ const placementFor = (
 
 export const parsePlacementRequest = (value: unknown): PlacementRequest => {
   if (typeof value !== "object" || value === null) throw new PlacementError("invalid_request", 400);
-  const { workspace, node } = value as Record<string, unknown>;
+  const { workspace, node, prefer } = value as Record<string, unknown>;
   if (
     typeof workspace !== "string" ||
     !WORKSPACE_NAME.test(workspace) ||
@@ -69,7 +74,18 @@ export const parsePlacementRequest = (value: unknown): PlacementRequest => {
   if (node !== undefined && node !== null && (typeof node !== "string" || node === "")) {
     throw new PlacementError("invalid_node", 400);
   }
-  return typeof node === "string" ? { workspace, node } : { workspace };
+  if (
+    prefer !== undefined &&
+    prefer !== null &&
+    (!Array.isArray(prefer) || !prefer.every((entry) => typeof entry === "string" && entry !== ""))
+  ) {
+    throw new PlacementError("invalid_prefer", 400);
+  }
+  return {
+    workspace,
+    ...(typeof node === "string" ? { node } : {}),
+    ...(Array.isArray(prefer) && prefer.length > 0 ? { prefer: prefer as string[] } : {}),
+  };
 };
 
 export const place = async (
@@ -92,17 +108,33 @@ export const place = async (
     return placementFor(node, observation, request.workspace, "requested");
   }
 
+  // Each node is observed at most once per placement, so a preferred node that failed is not
+  // probed again by the load-balancing fallback.
+  const observations = new Map<string, Promise<NodeObservation | null>>();
+  const observeOnce = (node: RouterNode) => {
+    let pending = observations.get(node.id);
+    if (!pending) {
+      pending = observe(node).catch(() => null);
+      observations.set(node.id, pending);
+    }
+    return pending;
+  };
+
+  for (const id of request.prefer ?? []) {
+    const node = config.nodes.find((candidate) => candidate.id === id);
+    if (!node || !node.enabled || !hosts(node, request.workspace)) continue;
+    const observation = await observeOnce(node);
+    if (observation) return placementFor(node, observation, request.workspace, "preferred");
+  }
+
   const candidates = config.nodes.filter(
     (node) => node.enabled && node.weight > 0 && hosts(node, request.workspace),
   );
   if (candidates.length === 0) throw new PlacementError("workspace_not_hosted", 409);
   const observed = await Promise.all(
     candidates.map(async (node) => {
-      try {
-        return { node, observation: await observe(node) };
-      } catch {
-        return null;
-      }
+      const observation = await observeOnce(node);
+      return observation ? { node, observation } : null;
     }),
   );
   const live = observed.filter((entry) => entry !== null);
